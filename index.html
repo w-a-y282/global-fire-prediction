@@ -3,486 +3,795 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>全球火灾预测模型多区域对比可视化平台</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <title>全球火灾智能预警系统</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
-
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#ef4444',
-                        secondary: '#f97316',
-                        accent: '#8b5cf6',
-                        dark: '#1e293b',
-                        light: '#f8fafc'
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'system-ui', 'sans-serif'],
-                    },
-                }
-            }
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-dark: #0f172a;
+            --primary-blue: #1e40af;
+            --danger-red: #dc2626;
+            --warning-orange: #f97316;
+            --success-green: #10b981;
+            --info-blue: #3b82f6;
+            --card-bg: #1e293b;
+            --border-color: #334155;
         }
-    </script>
 
-    <style type="text/tailwindcss">
-        @layer utilities {
-            .content-auto {
-                content-visibility: auto;
-            }
-            .map-container {
-                height: 450px;
-                width: 100%;
-            }
-            .chart-container {
-                height: 350px;
-                width: 100%;
-            }
-            .legend-gradient-fire {
-                background: linear-gradient(to right, #fef3c7, #fbbf24, #f97316, #ef4444, #dc2626);
-            }
-            .legend-gradient-pred {
-                background: linear-gradient(to right, #dbeafe, #3b82f6, #8b5cf6, #7c3aed, #5b21b6);
-            }
+        body {
+            background-color: var(--primary-dark);
+            color: #f1f5f9;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        .map-container {
+            height: calc(100vh - 320px);
+            width: 50%;
+            float: left;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        #real-map {
+            border-right: 3px solid var(--border-color);
+        }
+
+        .legend {
+            background: var(--card-bg);
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--border-color);
+            color: #f1f5f9;
+        }
+
+        .legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.8;
+            border-radius: 50%;
+        }
+
+        .date-picker, .threshold-slider {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 100%;
+            height: 8px;
+            background: var(--border-color);
+            border-radius: 4px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .date-picker::-webkit-slider-thumb,
+        .threshold-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            background: var(--danger-red);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 0 10px rgba(220, 38, 38, 0.5);
+        }
+
+        .date-picker::-webkit-slider-thumb:hover,
+        .threshold-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 15px rgba(220, 38, 38, 0.7);
+        }
+
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(15, 23, 42, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            border-radius: 8px;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 6px solid var(--border-color);
+            border-top: 6px solid var(--danger-red);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            transition: all 0.3s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .stat-card.real::before { background: #b71c1c; }
+        .stat-card.real.high::before { background: #7f0000; box-shadow: 0 0 10px rgba(127, 0, 0, 0.5); }
+
+        .stat-card.pred::before { background: #ff9800; }
+        .stat-card.pred.high::before { background: #e65100; box-shadow: 0 0 10px rgba(230, 81, 0, 0.5); }
+
+        .stat-card.high::before { background: #ffeb3b; }
+        .stat-card.high.high::before { background: #f9a825; box-shadow: 0 0 10px rgba(249, 168, 37, 0.5); }
+
+        .stat-card.recall::before { background: var(--success-green); }
+        .stat-card.recall.low::before { background: #059669; }
+        .stat-card.recall.medium::before { background: #10b981; }
+        .stat-card.recall.high::before { background: #34d399; box-shadow: 0 0 10px rgba(52, 211, 153, 0.5); }
+
+        .stat-card.fp::before { background: var(--info-blue); }
+        .stat-card.fp.low::before { background: #2563eb; box-shadow: 0 0 10px rgba(37, 99, 235, 0.5); }
+        .stat-card.fp.medium::before { background: #3b82f6; }
+        .stat-card.fp.high::before { background: #60a5fa; }
+
+        .stat-card.fn::before { background: #8b5cf6; }
+        .stat-card.fn.low::before { background: #7c3aed; box-shadow: 0 0 10px rgba(124, 58, 237, 0.5); }
+        .stat-card.fn.medium::before { background: #8b5cf6; }
+        .stat-card.fn.high::before { background: #a78bfa; }
+
+        .chart-container {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .nav-item {
+            transition: all 0.2s;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .nav-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-item.active {
+            background: var(--primary-blue);
+        }
+
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .info-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+
+        /* 彻底解决蓝圈问题：移除所有Leaflet圆形标记的默认边框 */
+        .leaflet-interactive {
+            stroke: none !important;
+            outline: none !important;
         }
     </style>
 </head>
-<body class="bg-gray-50 font-sans text-dark">
-    <header class="bg-white shadow-md sticky top-0 z-50">
-        <div class="container mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center">
-            <div class="flex items-center mb-2 md:mb-0">
-                <i class="fa fa-fire text-primary text-2xl mr-3"></i>
-                <h1 class="text-xl md:text-2xl font-bold text-dark">全球火灾预测模型多区域对比可视化平台</h1>
+<body>
+
+<!-- 顶部导航栏 -->
+<nav class="bg-slate-900 border-b border-slate-700 px-6 py-3">
+    <div class="max-w-7xl mx-auto flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <i class="fa fa-fire text-red-500 text-2xl"></i>
+            <h1 class="text-xl font-bold">全球火灾智能预警系统</h1>
+            <span class="text-xs bg-red-600 px-2 py-1 rounded-full">实时监测</span>
+        </div>
+        <div class="flex gap-2">
+            <div class="nav-item active" data-tab="map">
+                <i class="fa fa-map-marker mr-2"></i>地图对比
             </div>
-            <div class="flex items-center space-x-4">
-                <span id="data-status" class="text-sm text-gray-500">
-                    <i class="fa fa-spinner fa-spin mr-1"></i> 正在加载数据...
-                </span>
-                <button id="refresh-btn" class="bg-primary hover:bg-red-600 text-white px-3 py-1 rounded-md text-sm transition-colors">
-                    <i class="fa fa-refresh mr-1"></i> 刷新数据
-                </button>
+            <div class="nav-item" data-tab="stats">
+                <i class="fa fa-bar-chart mr-2"></i>数据统计
+            </div>
+            <div class="nav-item" data-tab="model">
+                <i class="fa fa-cogs mr-2"></i>模型评估
+            </div>
+            <div class="nav-item" data-tab="about">
+                <i class="fa fa-info-circle mr-2"></i>关于系统
             </div>
         </div>
-    </header>
+    </div>
+</nav>
 
-    <main class="container mx-auto px-4 py-4">
-        <div class="grid grid-cols-1 md:grid-cols-6 gap-4 mb-4">
-            <div class="bg-white rounded-lg shadow p-4 border-l-4 border-gray-500">
-                <h3 class="text-gray-500 text-sm font-medium">总数据点</h3>
-                <p id="total-points" class="text-2xl font-bold">--</p>
+<!-- 地图对比页面 -->
+<div id="map-tab" class="tab-content active">
+    <!-- 控制栏：日期 + 阈值 -->
+    <div class="bg-slate-800 border-b border-slate-700 px-6 py-4">
+        <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <!-- 日期控制 -->
+            <div>
+                <div class="flex items-center gap-3 mb-2">
+                    <i class="fa fa-calendar text-blue-400 text-xl"></i>
+                    <span class="text-lg font-medium">日期选择</span>
+                </div>
+                <div class="flex justify-between mb-2">
+                    <span class="text-sm text-slate-400">2021-01-01</span>
+                    <span id="current-date" class="text-lg font-semibold text-red-400">-</span>
+                    <span class="text-sm text-slate-400">2021-12-31</span>
+                </div>
+                <input type="range" id="date-slider" class="date-picker" min="0" max="0" value="0">
+                <div class="flex gap-2 mt-3">
+                    <button id="prev-day" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm">前一天</button>
+                    <button id="next-day" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm">后一天</button>
+                </div>
             </div>
-            <div class="bg-white rounded-lg shadow p-4 border-l-4 border-red-500">
-                <h3 class="text-gray-500 text-sm font-medium">总火灾天数</h3>
-                <p id="total-fire-days" class="text-2xl font-bold">--</p>
+
+            <!-- 阈值控制模块 -->
+            <div>
+                <div class="flex items-center gap-3 mb-2">
+                    <i class="fa fa-filter text-yellow-400 text-xl"></i>
+                    <span class="text-lg font-medium">预测显示阈值</span>
+                </div>
+                <div class="flex justify-between mb-2">
+                    <span class="text-sm text-slate-400">0.0</span>
+                    <span id="threshold-value" class="text-lg font-semibold text-yellow-400">0.10</span>
+                    <span class="text-sm text-slate-400">1.0</span>
+                </div>
+                <input type="range" id="threshold-slider" class="threshold-slider" min="0" max="100" value="10" step="1">
+                <div class="text-sm text-slate-400 mt-2">
+                    仅显示预测概率 ≥ <span id="threshold-text">0.10</span> 的点
+                </div>
             </div>
-            <div class="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
-                <h3 class="text-gray-500 text-sm font-medium">FB模型相关系数</h3>
-                <p id="fb-correlation" class="text-2xl font-bold">--</p>
+
+        </div>
+    </div>
+
+    <!-- 地图标题 -->
+    <div class="max-w-7xl mx-auto px-6 py-3">
+        <div class="flex justify-between text-center">
+            <div class="w-1/2 flex items-center justify-center gap-2">
+                <i class="fa fa-fire text-red-500"></i>
+                <span class="text-lg font-semibold text-red-400">真实火灾分布</span>
             </div>
-            <div class="bg-white rounded-lg shadow p-4 border-l-4 border-purple-500">
-                <h3 class="text-gray-500 text-sm font-medium">XGB模型相关系数</h3>
-                <p id="xgb-correlation" class="text-2xl font-bold">--</p>
+            <div class="w-1/2 flex items-center justify-center gap-2">
+                <i class="fa fa-exclamation-triangle text-orange-500"></i>
+                <span class="text-lg font-semibold text-orange-400">模型预测分布（过滤后）</span>
             </div>
-            <div class="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
-                <h3 class="text-gray-500 text-sm font-medium">高风险区域数</h3>
-                <p id="high-risk-areas" class="text-2xl font-bold">--</p>
+        </div>
+    </div>
+
+    <!-- 双地图容器 -->
+    <div class="max-w-7xl mx-auto px-6 relative">
+        <div id="real-map" class="map-container"></div>
+        <div id="pred-map" class="map-container"></div>
+        <div id="loading" class="loading-overlay hidden">
+            <div class="text-center">
+                <div class="spinner mx-auto mb-4"></div>
+                <p class="text-slate-300">正在加载数据...</p>
             </div>
-            <div class="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
-                <h3 class="text-gray-500 text-sm font-medium">渲染点数</h3>
-                <p id="rendered-points" class="text-2xl font-bold">--</p>
+        </div>
+    </div>
+
+    <!-- 数据分析面板 -->
+    <div class="max-w-7xl mx-auto px-6 py-6">
+        <h2 class="text-xl font-bold mb-6 flex items-center gap-2">
+            <i class="fa fa-line-chart text-blue-400"></i> 当日数据分析
+        </h2>
+
+        <!-- 统计卡片 -->
+        <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
+            <div id="card-real" class="stat-card real">
+                <div class="flex justify-between items-start mb-2">
+                    <div class="text-sm text-red-400 font-medium">真实火灾数</div>
+                    <i class="fa fa-fire text-red-500"></i>
+                </div>
+                <div id="real-fire-count" class="text-3xl font-bold text-white">0</div>
+            </div>
+            <div id="card-pred" class="stat-card pred">
+                <div class="flex justify-between items-start mb-2">
+                    <div class="text-sm text-orange-400 font-medium">显示预测点</div>
+                    <i class="fa fa-exclamation-triangle text-orange-500"></i>
+                </div>
+                <div id="total-pred-count" class="text-3xl font-bold text-white">0</div>
+            </div>
+            <div id="card-high" class="stat-card high">
+                <div class="flex justify-between items-start mb-2">
+                    <div class="text-sm text-yellow-400 font-medium">高概率点(≥0.7)</div>
+                    <i class="fa fa-warning text-yellow-500"></i>
+                </div>
+                <div id="high-pred-count" class="text-3xl font-bold text-white">0</div>
+            </div>
+            <div id="card-recall" class="stat-card recall">
+                <div class="flex justify-between items-start mb-2">
+                    <div class="text-sm text-green-400 font-medium">召回率</div>
+                    <i class="fa fa-check-circle text-green-500"></i>
+                </div>
+                <div id="recall" class="text-3xl font-bold text-white">0%</div>
+            </div>
+            <div id="card-fp" class="stat-card fp">
+                <div class="flex justify-between items-start mb-2">
+                    <div class="text-sm text-blue-400 font-medium">误报率</div>
+                    <i class="fa fa-times-circle text-blue-500"></i>
+                </div>
+                <div id="false-positive" class="text-3xl font-bold text-white">0%</div>
+            </div>
+            <div id="card-fn" class="stat-card fn">
+                <div class="flex justify-between items-start mb-2">
+                    <div class="text-sm text-purple-400 font-medium">漏报率</div>
+                    <i class="fa fa-minus-circle text-purple-500"></i>
+                </div>
+                <div id="false-negative" class="text-3xl font-bold text-white">0%</div>
             </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow p-4 mb-4">
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div class="flex flex-col md:flex-row gap-4 w-full md:w-auto">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">区域筛选</label>
-                        <select id="region-filter" class="border border-gray-300 rounded-md px-3 py-2 w-full md:w-40">
-                            <option value="all">全部区域</option>
-                            <option value="1">Region 1 (最密集)</option>
-                            <option value="2">Region 2</option>
-                            <option value="3">Region 3</option>
-                            <option value="4">Region 4</option>
-                            <option value="5">Region 5 (最稀疏)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">火灾天数阈值 (≥x天)</label>
-                        <input type="range" id="fire-days-threshold" min="1" max="365" step="1" value="1"
-                               class="w-full md:w-40 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
-                        <span id="fire-days-value" class="text-sm text-gray-500">1天</span>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">预测概率阈值 (≥y)</label>
-                        <input type="range" id="pred-threshold" min="0" max="1" step="0.01" value="0"
-                               class="w-full md:w-40 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
-                        <span id="pred-threshold-value" class="text-sm text-gray-500">0</span>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">点大小</label>
-                        <input type="range" id="point-size" min="1" max="8" step="1" value="3"
-                               class="w-full md:w-40 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
-                        <span id="point-size-value" class="text-sm text-gray-500">3px</span>
-                    </div>
+        <!-- 图表区域 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="chart-container">
+                <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <i class="fa fa-pie-chart text-yellow-400"></i> 预测概率分布
+                </h3>
+                <canvas id="probability-chart" height="220"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <i class="fa fa-area-chart text-green-400"></i> 已查看日期趋势
+                </h3>
+                <canvas id="trend-chart" height="220"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 数据统计页面 -->
+<div id="stats-tab" class="tab-content">
+    <div class="max-w-7xl mx-auto px-6 py-8">
+        <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+            <i class="fa fa-bar-chart text-blue-400"></i> 数据统计
+        </h2>
+        <div class="info-card">
+            <h3 class="text-xl font-semibold mb-4">已查看日期汇总统计</h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <div>
+                    <div class="text-sm text-slate-400 mb-1">已查看天数</div>
+                    <div id="total-days" class="text-3xl font-bold text-white">0</div>
+                </div>
+                <div>
+                    <div class="text-sm text-slate-400 mb-1">累计真实火灾</div>
+                    <div id="total-real-fires" class="text-3xl font-bold text-red-400">0</div>
+                </div>
+                <div>
+                    <div class="text-sm text-slate-400 mb-1">累计显示预测点</div>
+                    <div id="total-pred-fires" class="text-3xl font-bold text-orange-400">0</div>
+                </div>
+                <div>
+                    <div class="text-sm text-slate-400 mb-1">平均召回率</div>
+                    <div id="avg-recall" class="text-3xl font-bold text-green-400">0%</div>
                 </div>
             </div>
         </div>
+        <div class="chart-container">
+            <h3 class="text-lg font-semibold mb-4">已查看日期火灾数量趋势</h3>
+            <canvas id="stats-trend-chart" height="300"></canvas>
+        </div>
+    </div>
+</div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-            <div class="bg-white rounded-lg shadow overflow-hidden">
-                <div class="p-3 border-b border-gray-200 bg-red-50">
-                    <h2 class="font-semibold text-lg text-red-700">
-                        <i class="fa fa-fire mr-2"></i>真实火灾密度图
-                    </h2>
-                    <p class="text-sm text-gray-600">全年火灾发生天数</p>
+<!-- 模型评估页面 -->
+<div id="model-tab" class="tab-content">
+    <div class="max-w-7xl mx-auto px-6 py-8">
+        <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+            <i class="fa fa-cogs text-blue-400"></i> 模型评估
+        </h2>
+        <div class="info-card">
+            <h3 class="text-xl font-semibold mb-4">模型参数设置</h3>
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-6">
+                <div>
+                    <div class="text-sm text-slate-400 mb-1">当前显示阈值</div>
+                    <div id="current-threshold-param" class="text-xl font-bold text-white">0.10</div>
                 </div>
-                <div id="map-actual" class="map-container w-full"></div>
-                <div class="p-3 border-t border-gray-200">
-                    <div class="flex items-center justify-center">
-                        <div class="w-full h-3 rounded legend-gradient-fire mr-2"></div>
-                    </div>
-                    <div class="flex justify-between text-xs text-gray-500 mt-1">
-                        <span>0天</span>
-                        <span>30天</span>
-                        <span>60天</span>
-                        <span>90天</span>
-                        <span>120+天</span>
-                    </div>
+                <div>
+                    <div class="text-sm text-slate-400 mb-1">空间匹配距离</div>
+                    <div class="text-xl font-bold text-white">5公里</div>
                 </div>
-            </div>
-
-            <div class="bg-white rounded-lg shadow overflow-hidden">
-                <div class="p-3 border-b border-gray-200 bg-orange-50">
-                    <h2 class="font-semibold text-lg text-orange-700">
-                        <i class="fa fa-line-chart mr-2"></i>FB模型预测图
-                    </h2>
-                    <p class="text-sm text-gray-600">全年平均预测概率</p>
-                </div>
-                <div id="map-fb" class="map-container w-full"></div>
-                <div class="p-3 border-t border-gray-200">
-                    <div class="flex items-center justify-center">
-                        <div class="w-full h-3 rounded legend-gradient-pred mr-2"></div>
-                    </div>
-                    <div class="flex justify-between text-xs text-gray-500 mt-1">
-                        <span>0.0</span>
-                        <span>0.25</span>
-                        <span>0.5</span>
-                        <span>0.75</span>
-                        <span>1.0</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-white rounded-lg shadow overflow-hidden">
-                <div class="p-3 border-b border-gray-200 bg-purple-50">
-                    <h2 class="font-semibold text-lg text-purple-700">
-                        <i class="fa fa-balance-scale mr-2"></i>XGBoost基线预测图
-                    </h2>
-                    <p class="text-sm text-gray-600">全年平均预测概率</p>
-                </div>
-                <div id="map-xgb" class="map-container w-full"></div>
-                <div class="p-3 border-t border-gray-200">
-                    <div class="flex items-center justify-center">
-                        <div class="w-full h-3 rounded legend-gradient-pred mr-2"></div>
-                    </div>
-                    <div class="flex justify-between text-xs text-gray-500 mt-1">
-                        <span>0.0</span>
-                        <span>0.25</span>
-                        <span>0.5</span>
-                        <span>0.75</span>
-                        <span>1.0</span>
-                    </div>
+                <div>
+                    <div class="text-sm text-slate-400 mb-1">数据点大小</div>
+                    <div class="text-xl font-bold text-white">3像素</div>
                 </div>
             </div>
         </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div class="bg-white rounded-lg shadow p-4">
-                <h3 class="font-semibold mb-3">真实火灾天数 vs FB模型预测概率</h3>
-                <div class="chart-container">
-                    <canvas id="scatter-fb"></canvas>
+        <div class="info-card">
+            <h3 class="text-xl font-semibold mb-4">模型性能指标（已查看日期平均）</h3>
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-6">
+                <div>
+                    <div class="text-sm text-slate-400 mb-1">平均召回率</div>
+                    <div id="model-avg-recall" class="text-3xl font-bold text-green-400">0%</div>
                 </div>
-            </div>
-            <div class="bg-white rounded-lg shadow p-4">
-                <h3 class="font-semibold mb-3">真实火灾天数 vs XGBoost模型预测概率</h3>
-                <div class="chart-container">
-                    <canvas id="scatter-xgb"></canvas>
+                <div>
+                    <div class="text-sm text-slate-400 mb-1">平均误报率</div>
+                    <div id="model-avg-fp" class="text-3xl font-bold text-blue-400">0%</div>
+                </div>
+                <div>
+                    <div class="text-sm text-slate-400 mb-1">平均漏报率</div>
+                    <div id="model-avg-fn" class="text-3xl font-bold text-purple-400">0%</div>
                 </div>
             </div>
         </div>
-    </main>
+    </div>
+</div>
 
-    <footer class="bg-dark text-white py-6 mt-8">
-        <div class="container mx-auto px-4 text-center">
-            <p>© 2025 全球火灾预测模型 | 多区域对比分析平台</p>
-            <p class="text-gray-400 text-sm mt-2">数据更新时间: <span id="update-time">--</span></p>
+<!-- 关于系统页面 -->
+<div id="about-tab" class="tab-content">
+    <div class="max-w-7xl mx-auto px-6 py-8">
+        <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+            <i class="fa fa-info-circle text-blue-400"></i> 关于系统
+        </h2>
+        <div class="info-card">
+            <h3 class="text-xl font-semibold mb-4">使用说明</h3>
+            <ul class="text-slate-300 list-disc list-inside space-y-2">
+                <li>拖动<b>预测显示阈值</b>滑块，可实时隐藏低概率预测点</li>
+                <li>地图<b>只显示 ≥ 当前阈值</b>的火灾预测</li>
+                <li>统计数据会随阈值变化自动刷新</li>
+            </ul>
         </div>
-    </footer>
+    </div>
+</div>
 
-    <script>
-        let maps = {};
-        let layers = { actual: null, fb: null, xgb: null };
-        let fireData = null;
-        let filteredData = null;
-        let charts = {};
-        let mapsInitialized = false;
+<!-- 页脚 -->
+<footer class="bg-slate-900 border-t border-slate-700 px-6 py-4 mt-6">
+    <div class="max-w-7xl mx-auto text-slate-400 text-sm text-center">
+        © 2025 全球火灾智能预警系统 | 空间匹配：5km
+    </div>
+</footer>
 
-        window.onload = function () {
-            // 逐个初始化地图，确保底图加载
-            initMap('map-actual');
-            initMap('map-fb');
-            initMap('map-xgb');
+<script>
+let realMap, predMap;
+let realFireLayer, predictionLayer;
+let dateList = [];
+let currentDateIndex = 0;
+let probabilityChart, trendChart, statsTrendChart;
 
-            setTimeout(() => {
-                loadData();
-                setupEvents();
-            }, 1000);
-        };
+// 全局阈值（可网页调整）
+let DISPLAY_THRESHOLD = 0.1;
 
-        // 关键修复：每张地图独立初始化，独立加载底图
-        function initMap(mapId) {
-            const mapOptions = {
-                zoom: 2,
-                center: [20, 0],
-                zoomControl: true,
-                attributionControl: true,
-                preferCanvas: true
-            };
+// 全局数据
+let allData = { dates: [], realFires: [], predFires: [], recalls: [] };
+let currentGeoJson = null; // 缓存当日数据，用于阈值实时刷新
 
-            maps[mapId] = L.map(mapId, mapOptions);
+const POINT_RADIUS = 3;
+const MATCH_DISTANCE_KM = 5;
 
-            // 使用100%稳定的OpenStreetMap底图
-            const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                maxZoom: 10
-            });
+// 初始化标签页
+function initTabs() {
+    const navItems = document.querySelectorAll('.nav-item');
+    const tabContents = document.querySelectorAll('.tab-content');
+    navItems.forEach(item => {
+        item.addEventListener('click', () => {
+            navItems.forEach(n => n.classList.remove('active'));
+            tabContents.forEach(c => c.classList.remove('active'));
+            item.classList.add('active');
+            document.getElementById(`${item.dataset.tab}-tab`).classList.add('active');
+            if (item.dataset.tab === 'stats') updateStatsPage();
+            if (item.dataset.tab === 'model') document.getElementById('current-threshold-param').innerText = DISPLAY_THRESHOLD.toFixed(2);
+        });
+    });
+}
 
-            tileLayer.addTo(maps[mapId]);
+// 初始化地图
+function initMaps() {
+    realMap = L.map('real-map').setView([20, 0], 2);
+    predMap = L.map('pred-map').setView([20, 0], 2);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(realMap);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(predMap);
+    addLegends();
+    initCharts();
+}
 
-            // 强制重绘，确保瓦片加载
-            setTimeout(() => {
-                maps[mapId].invalidateSize(true);
-                mapsInitialized = true;
-            }, 300);
+// 更新图例（使用新配色）
+function addLegends() {
+    // 真实火灾图例
+    const realLegend = L.control({position: 'bottomright'});
+    realLegend.onAdd = function () {
+        const div = L.DomUtil.create('div', 'legend');
+        div.innerHTML += '<h4 class="font-bold mb-2">真实火灾</h4>';
+        div.innerHTML += '<div class="flex items-center"><i style="background: #b71c1c;"></i> 火灾发生点</div>';
+        return div;
+    };
+    realLegend.addTo(realMap);
+
+    // 预测火灾图例（新配色）
+    const predLegend = L.control({position: 'bottomright'});
+    predLegend.onAdd = function () {
+        const div = L.DomUtil.create('div', 'legend');
+        div.innerHTML += '<h4 class="font-bold mb-2">预测概率</h4>';
+        div.innerHTML += '<div class="flex items-center mb-1"><i style="background: #fff9c4; opacity: 0.2"></i> 极低 (<0.1)</div>';
+        div.innerHTML += '<div class="flex items-center mb-1"><i style="background: #ffeb3b; opacity: 0.4"></i> 低 (0.1-0.3)</div>';
+        div.innerHTML += '<div class="flex items-center mb-1"><i style="background: #ff9800; opacity: 0.7"></i> 中 (0.3-0.7)</div>';
+        div.innerHTML += '<div class="flex items-center"><i style="background: #f44336; opacity: 0.9"></i> 高 (≥0.7)</div>';
+        return div;
+    };
+    predLegend.addTo(predMap);
+}
+
+function initCharts() {
+    const probCtx = document.getElementById('probability-chart').getContext('2d');
+    probabilityChart = new Chart(probCtx, {
+        type: 'bar', data: {
+            labels: ['极低(<0.1)', '低(0.1-0.3)', '中(0.3-0.7)', '高(≥0.7)'],
+            datasets: [{ data: [0,0,0,0], backgroundColor: ['#fff9c4','#ffeb3b','#ff9800','#f44336'] }]
+        }, options: { plugins:{legend:false}, scales:{y:{beginAtZero:true,grid:{color:'rgba(255,255,255,0.1)'}},x:{grid:{display:false}}} }
+    });
+
+    const trendCtx = document.getElementById('trend-chart').getContext('2d');
+    trendChart = new Chart(trendCtx, {
+        type: 'line', data: { labels:[], datasets:[
+            { label:'真实火灾', borderColor:'#b71c1c', backgroundColor:'rgba(183, 28, 28, 0.2)', fill:true, tension:0.3 },
+            { label:'显示预测点', borderColor:'#ff9800', backgroundColor:'rgba(255, 152, 0, 0.2)', fill:true, tension:0.3 }
+        ]},
+        options: { plugins:{legend:{labels:{color:'#f1f5f9'}}}, scales:{y:{grid:{color:'rgba(255,255,255,0.1)'}},x:{grid:{display:false},ticks:{color:'#f1f5f9'}}} }
+    });
+
+    const statsCtx = document.getElementById('stats-trend-chart').getContext('2d');
+    statsTrendChart = new Chart(statsCtx, {
+        type: 'line', data: { labels:[], datasets:[
+            { label:'真实火灾', borderColor:'#b71c1c', backgroundColor:'rgba(183, 28, 28, 0.2)', fill:true },
+            { label:'显示预测点', borderColor:'#ff9800', backgroundColor:'rgba(255, 152, 0, 0.2)', fill:true }
+        ]},
+        options: { plugins:{legend:{labels:{color:'#f1f5f9'}}}, scales:{y:{grid:{color:'rgba(255,255,255,0.1)'}},x:{grid:{display:false},ticks:{color:'#f1f5f9'}}} }
+    });
+}
+
+// 阈值滑块事件
+document.getElementById('threshold-slider').addEventListener('input', e => {
+    DISPLAY_THRESHOLD = parseFloat((e.target.value / 100).toFixed(2));
+    document.getElementById('threshold-value').innerText = DISPLAY_THRESHOLD.toFixed(2);
+    document.getElementById('threshold-text').innerText = DISPLAY_THRESHOLD.toFixed(2);
+    if (currentGeoJson) refreshMap();
+});
+
+// 刷新地图（根据阈值重绘）
+function refreshMap() {
+    clearLayers();
+    const stats = createLayers(currentGeoJson);
+    updateStatistics(stats);
+    updateCardColors(stats);
+    probabilityChart.data.datasets[0].data = [stats.veryLow, stats.low, stats.mid, stats.high];
+    probabilityChart.update();
+}
+
+// 加载日期列表
+async function loadDateList() {
+    const res = await fetch('fire_data_by_date/date_list.json');
+    dateList = await res.json();
+    document.getElementById('date-slider').max = dateList.length-1;
+    updateDate();
+    loadDayData();
+}
+
+function updateDate() {
+    document.getElementById('current-date').innerText = dateList[currentDateIndex];
+}
+
+// 加载当日数据并缓存
+async function loadDayData() {
+    showLoading(true);
+    const date = dateList[currentDateIndex];
+    const res = await fetch(`fire_data_by_date/fire_${date}.geojson`);
+    currentGeoJson = await res.json();
+    refreshMap();
+    showLoading(false);
+}
+
+// 绘制图层（只显示 ≥ 阈值，完全无边框）
+function createLayers(geojson) {
+    let realFires = [], realLayer = [];
+    let predLayer = [];
+    let stats = { real:0, veryLow:0, low:0, mid:0, high:0, showPred:0, TP:0, FP:0, FN:0 };
+    let matchPreds = [], matchReals = [];
+
+    geojson.features.forEach(f => {
+        const p = f.properties;
+        const lat = f.geometry.coordinates[1];
+        const lng = f.geometry.coordinates[0];
+        const prob = p.prediction;
+
+        // 真实火灾（深红色，完全无边框）
+        if (p.fire_occurred === 1) {
+            stats.real++;
+            matchReals.push({lat,lng,matched:false});
+            realLayer.push(L.circleMarker([lat,lng],{
+                radius: POINT_RADIUS,
+                fillColor: '#b71c1c',
+                fillOpacity: 0.9,
+                stroke: false, // 彻底禁用边框
+                weight: 0
+            }));
         }
 
-        async function loadData() {
-            try {
-                document.getElementById('data-status').innerHTML = '<i class="fa fa-spinner fa-spin mr-1"></i> 正在加载数据...';
-                const response = await fetch('fire_data.geojson', { cache: 'no-store' });
-                fireData = await response.json();
-                filteredData = [...fireData.features];
-                precomputeColors();
-                document.getElementById('data-status').innerHTML = `<i class="fa fa-check text-green-500 mr-1"></i> 数据加载成功 (${fireData.features.length}个地点)`;
-                document.getElementById('update-time').textContent = new Date().toLocaleString();
-                updateUI();
-            } catch (error) {
-                console.error('数据加载失败:', error);
-                alert(`数据加载失败：${error.message}`);
-                generateSampleData();
+        // 概率分段（新配色）
+        let color, opacity;
+        if (prob < 0.1) {
+            color = '#fff9c4';
+            opacity = 0.2;
+            stats.veryLow++;
+        }
+        else if (prob < 0.3) {
+            color = '#ffeb3b';
+            opacity = 0.4;
+            stats.low++;
+        }
+        else if (prob < 0.7) {
+            color = '#ff9800';
+            opacity = 0.7;
+            stats.mid++;
+        }
+        else {
+            color = '#f44336';
+            opacity = 0.9;
+            stats.high++;
+        }
+
+        // 只显示 ≥ 阈值的预测点（完全无边框）
+        if (prob >= DISPLAY_THRESHOLD) {
+            stats.showPred++;
+            if (prob >= 0.1) matchPreds.push({lat,lng,matched:false});
+
+            predLayer.push(L.circleMarker([lat,lng],{
+                radius: POINT_RADIUS,
+                fillColor: color,
+                fillOpacity: opacity,
+                stroke: false, // 彻底禁用边框
+                weight: 0
+            }));
+        }
+    });
+
+    // 空间匹配
+    const match = spatialMatch(matchReals, matchPreds, MATCH_DISTANCE_KM);
+    stats.TP = match.TP;
+    stats.FP = match.FP;
+    stats.FN = match.FN;
+
+    realFireLayer = L.layerGroup(realLayer).addTo(realMap);
+    predictionLayer = L.layerGroup(predLayer).addTo(predMap);
+    return stats;
+}
+
+// 空间匹配
+function spatialMatch(realFires, preds, maxKm) {
+    let TP=0, FP=0, FN=0;
+    realFires.forEach(r => {
+        let min = 999, best = null;
+        preds.forEach(p => {
+            if (!p.matched) {
+                const d = Math.acos(Math.sin(r.lat*Math.PI/180)*Math.sin(p.lat*Math.PI/180)+
+                        Math.cos(r.lat*Math.PI/180)*Math.cos(p.lat*Math.PI/180)*
+                        Math.cos((p.lng-r.lng)*Math.PI/180))*6371;
+                if (d < maxKm && d < min) { min = d; best = p; }
             }
-        }
+        });
+        if (best) { TP++; best.matched=true; } else FN++;
+    });
+    preds.forEach(p => { if (!p.matched) FP++; });
+    return {TP,FP,FN};
+}
 
-        function precomputeColors() {
-            fireData.features.forEach(feature => {
-                const props = feature.properties;
-                const fireDays = props.fire_days;
-                if (fireDays < 10) feature._fireColor = '#fef3c7';
-                else if (fireDays < 30) feature._fireColor = '#fbbf24';
-                else if (fireDays < 60) feature._fireColor = '#f97316';
-                else if (fireDays < 90) feature._fireColor = '#ef4444';
-                else feature._fireColor = '#dc2626';
+// 更新统计
+function updateStatistics(stats) {
+    document.getElementById('real-fire-count').innerText = stats.real;
+    document.getElementById('total-pred-count').innerText = stats.showPred;
+    document.getElementById('high-pred-count').innerText = stats.high;
 
-                const fbPre = props.fb_pre_avg;
-                if (fbPre < 0.05) feature._fbColor = '#dbeafe';
-                else if (fbPre < 0.1) feature._fbColor = '#93c5fd';
-                else if (fbPre < 0.2) feature._fbColor = '#3b82f6';
-                else if (fbPre < 0.3) feature._fbColor = '#8b5cf6';
-                else feature._fbColor = '#5b21b6';
+    let recall = 0, fpRate=0, fnRate=0;
+    if (stats.real>0) {
+        recall = (stats.TP / stats.real *100).toFixed(1);
+        fnRate = (stats.FN / stats.real *100).toFixed(1);
+    }
+    if (stats.showPred>0) fpRate = (stats.FP / stats.showPred *100).toFixed(1);
 
-                const xgbPre = props.xgb_pre_avg;
-                if (xgbPre < 0.05) feature._xgbColor = '#dbeafe';
-                else if (xgbPre < 0.1) feature._xgbColor = '#93c5fd';
-                else if (xgbPre < 0.2) feature._xgbColor = '#3b82f6';
-                else if (xgbPre < 0.3) feature._xgbColor = '#8b5cf6';
-                else feature._xgbColor = '#5b21b6';
-            });
-        }
+    document.getElementById('recall').innerText = recall+'%';
+    document.getElementById('false-positive').innerText = fpRate+'%';
+    document.getElementById('false-negative').innerText = fnRate+'%';
 
-        function generateSampleData() {
-            fireData = { type: 'FeatureCollection', features: [] };
-            for (let region = 1; region <= 5; region++) {
-                const lonBase = (region - 3) * 70;
-                const latBase = (region % 2 === 0 ? 30 : -30);
-                for (let i = 0; i < 5000; i++) {
-                    const lon = lonBase + (Math.random() * 60 - 30);
-                    const lat = latBase + (Math.random() * 40 - 20);
-                    const fireDays = Math.floor(Math.random() * 120);
-                    const fbPreAvg = Math.min(1, fireDays / 365 + Math.random() * 0.1);
-                    const xgbPreAvg = Math.min(1, fireDays / 365 + Math.random() * 0.15);
-                    fireData.features.push({
-                        geometry: { coordinates: [lon, lat] },
-                        properties: { region, fire_days: fireDays, fb_pre_avg: fbPreAvg, xgb_pre_avg: xgbPreAvg }
-                    });
-                }
-            }
-            filteredData = [...fireData.features];
-            precomputeColors();
-            updateUI();
-        }
+    // 记录历史
+    if (!allData.dates.includes(dateList[currentDateIndex])) {
+        allData.dates.push(dateList[currentDateIndex]);
+        allData.realFires.push(stats.real);
+        allData.predFires.push(stats.showPred);
+        allData.recalls.push(parseFloat(recall));
+        trendChart.data.labels = allData.dates;
+        trendChart.data.datasets[0].data = allData.realFires;
+        trendChart.data.datasets[1].data = allData.predFires;
+        trendChart.update();
+    }
+}
 
-        function updateUI() {
-            if (!mapsInitialized) return;
-            applyFilters();
-            updateStatistics();
-            renderAllPoints();
-            setTimeout(updateCharts, 500);
-        }
+// 卡片颜色
+function updateCardColors(stats) {
+    const realCard = document.getElementById('card-real');
+    realCard.classList.toggle('high', stats.real>50);
+    const predCard = document.getElementById('card-pred');
+    predCard.classList.toggle('high', stats.showPred>100);
+}
 
-        function applyFilters() {
-            const selectedRegion = document.getElementById('region-filter').value;
-            filteredData = fireData.features.filter(f =>
-                selectedRegion === 'all' || f.properties.region === parseInt(selectedRegion)
-            );
-        }
+// 清空图层
+function clearLayers() {
+    if (realFireLayer) realMap.removeLayer(realFireLayer);
+    if (predictionLayer) predMap.removeLayer(predictionLayer);
+}
 
-        function updateStatistics() {
-            const totalPoints = filteredData.length;
-            const totalFireDays = filteredData.reduce((sum, f) => sum + f.properties.fire_days, 0);
-            const fireDaysThreshold = parseInt(document.getElementById('fire-days-threshold').value);
-            const highRiskAreas = filteredData.filter(f => f.properties.fire_days >= fireDaysThreshold).length;
-            const fbCorrelation = calculateCorrelation(
-                filteredData.map(f => f.properties.fire_days),
-                filteredData.map(f => f.properties.fb_pre_avg)
-            );
-            const xgbCorrelation = calculateCorrelation(
-                filteredData.map(f => f.properties.fire_days),
-                filteredData.map(f => f.properties.xgb_pre_avg)
-            );
-            document.getElementById('total-points').textContent = totalPoints.toLocaleString();
-            document.getElementById('total-fire-days').textContent = totalFireDays.toLocaleString();
-            document.getElementById('fb-correlation').textContent = fbCorrelation.toFixed(3);
-            document.getElementById('xgb-correlation').textContent = xgbCorrelation.toFixed(3);
-            document.getElementById('high-risk-areas').textContent = highRiskAreas.toLocaleString();
-        }
+// 加载状态
+function showLoading(show) {
+    document.getElementById('loading').classList.toggle('hidden', !show);
+}
 
-        function calculateCorrelation(x, y) {
-            if (x.length !== y.length || x.length === 0) return 0;
-            const n = x.length;
-            let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, sumY2 = 0;
-            for (let i = 0; i < n; i++) {
-                sumX += x[i]; sumY += y[i]; sumXY += x[i] * y[i];
-                sumX2 += x[i] * x[i]; sumY2 += y[i] * y[i];
-            }
-            const numerator = n * sumXY - sumX * sumY;
-            const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
-            return denominator === 0 ? 0 : numerator / denominator;
-        }
+// 日期控制
+document.getElementById('date-slider').addEventListener('input', e => {
+    currentDateIndex = parseInt(e.target.value);
+    updateDate();
+    loadDayData();
+});
+document.getElementById('prev-day').addEventListener('click', () => {
+    if (currentDateIndex>0) { currentDateIndex--; document.getElementById('date-slider').value=currentDateIndex; updateDate(); loadDayData(); }
+});
+document.getElementById('next-day').addEventListener('click', () => {
+    if (currentDateIndex < dateList.length-1) { currentDateIndex++; document.getElementById('date-slider').value=currentDateIndex; updateDate(); loadDayData(); }
+});
 
-        function renderAllPoints() {
-            if (!mapsInitialized) return;
-            if (layers.actual) maps['map-actual'].removeLayer(layers.actual);
-            if (layers.fb) maps['map-fb'].removeLayer(layers.fb);
-            if (layers.xgb) maps['map-xgb'].removeLayer(layers.xgb);
+// 统计页更新
+function updateStatsPage() {
+    document.getElementById('total-days').innerText = allData.dates.length;
+    document.getElementById('total-real-fires').innerText = allData.realFires.reduce((a,b)=>a+b,0);
+    document.getElementById('total-pred-fires').innerText = allData.predFires.reduce((a,b)=>a+b,0);
+    statsTrendChart.data.labels = allData.dates;
+    statsTrendChart.data.datasets[0].data = allData.realFires;
+    statsTrendChart.data.datasets[1].data = allData.predFires;
+    statsTrendChart.update();
+}
 
-            layers.actual = L.layerGroup().addTo(maps['map-actual']);
-            layers.fb = L.layerGroup().addTo(maps['map-fb']);
-            layers.xgb = L.layerGroup().addTo(maps['map-xgb']);
-
-            const fireDaysThreshold = parseInt(document.getElementById('fire-days-threshold').value);
-            const predThreshold = parseFloat(document.getElementById('pred-threshold').value);
-            const pointSize = parseInt(document.getElementById('point-size').value);
-
-            const maxRenderPoints = 30000;
-            const step = Math.max(1, Math.floor(filteredData.length / maxRenderPoints));
-            let renderedCount = 0;
-
-            for (let i = 0; i < filteredData.length; i += step) {
-                const feature = filteredData[i];
-                const props = feature.properties;
-                const lat = feature.geometry.coordinates[1];
-                const lon = feature.geometry.coordinates[0];
-
-                if (props.fire_days >= fireDaysThreshold) {
-                    L.circleMarker([lat, lon], {
-                        radius: pointSize,
-                        fillColor: feature._fireColor,
-                        fillOpacity: 0.9,
-                        stroke: false
-                    }).addTo(layers.actual);
-                    renderedCount++;
-                }
-
-                if (props.fb_pre_avg >= predThreshold) {
-                    L.circleMarker([lat, lon], {
-                        radius: pointSize,
-                        fillColor: feature._fbColor,
-                        fillOpacity: 0.9,
-                        stroke: false
-                    }).addTo(layers.fb);
-                }
-
-                if (props.xgb_pre_avg >= predThreshold) {
-                    L.circleMarker([lat, lon], {
-                        radius: pointSize,
-                        fillColor: feature._xgbColor,
-                        fillOpacity: 0.9,
-                        stroke: false
-                    }).addTo(layers.xgb);
-                }
-            }
-            document.getElementById('rendered-points').textContent = renderedCount.toLocaleString();
-        }
-
-        function updateCharts() {
-            Object.values(charts).forEach(chart => { if (chart) chart.destroy(); });
-            charts = {};
-
-            const fireDays = filteredData.map(f => f.properties.fire_days);
-            const fbPreds = filteredData.map(f => f.properties.fb_pre_avg);
-            const xgbPreds = filteredData.map(f => f.properties.xgb_pre_avg);
-
-            const sampleSize = Math.min(2000, fireDays.length);
-            const step = Math.floor(fireDays.length / sampleSize);
-            const sampledFire = [];
-            const sampledFb = [];
-            const sampledXgb = [];
-            for (let i = 0; i < fireDays.length; i += step) {
-                sampledFire.push(fireDays[i]);
-                sampledFb.push(fbPreds[i]);
-                sampledXgb.push(xgbPreds[i]);
-            }
-
-            const ctxFb = document.getElementById('scatter-fb').getContext('2d');
-            charts.fb = new Chart(ctxFb, {
-                type: 'scatter',
-                data: { datasets: [{ label: 'FB模型', data: sampledFire.map((x, i) => ({x: x, y: sampledFb[i]})), backgroundColor: 'rgba(239, 68, 68, 0.6)', pointRadius: 2 }] },
-                options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: '全年火灾天数' }, min: 0, max: Math.max(120, ...sampledFire) }, y: { title: { display: true, text: '平均预测概率' }, min: 0, max: Math.max(0.5, ...sampledFb) } } }
-            });
-
-            const ctxXgb = document.getElementById('scatter-xgb').getContext('2d');
-            charts.xgb = new Chart(ctxXgb, {
-                type: 'scatter',
-                data: { datasets: [{ label: 'XGBoost模型', data: sampledFire.map((x, i) => ({x: x, y: sampledXgb[i]})), backgroundColor: 'rgba(139, 92, 246, 0.6)', pointRadius: 2 }] },
-                options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: '全年火灾天数' }, min: 0, max: Math.max(120, ...sampledFire) }, y: { title: { display: true, text: '平均预测概率' }, min: 0, max: Math.max(0.5, ...sampledXgb) } } }
-            });
-        }
-
-        function setupEvents() {
-            document.getElementById('region-filter').addEventListener('change', updateUI);
-            document.getElementById('fire-days-threshold').addEventListener('input', (e) => { document.getElementById('fire-days-value').textContent = e.target.value + '天'; });
-            document.getElementById('fire-days-threshold').addEventListener('change', updateUI);
-            document.getElementById('pred-threshold').addEventListener('input', (e) => { document.getElementById('pred-threshold-value').textContent = e.target.value; });
-            document.getElementById('pred-threshold').addEventListener('change', updateUI);
-            document.getElementById('point-size').addEventListener('input', (e) => { document.getElementById('point-size-value').textContent = e.target.value + 'px'; });
-            document.getElementById('point-size').addEventListener('change', renderAllPoints);
-            document.getElementById('refresh-btn').addEventListener('click', loadData);
-        }
-    </script>
+// 启动
+window.onload = () => { initTabs(); initMaps(); loadDateList(); }
+</script>
 </body>
 </html>
