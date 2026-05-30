@@ -1,147 +1,226 @@
-import pandas as pd
 import json
 import os
-import warnings
+import shutil
+from collections import defaultdict
+from multiprocessing import Pool
+from tqdm import tqdm
 
-warnings.filterwarnings('ignore')
+# ===================== 核心配置 =====================
+MAX_PROCESSES = 3
+WRITE_BATCH = 5_000_000
+COORD_PREC = 2
+# 🔥 预测值过滤阈值（预测值 < 此值 且 真实标签=0 的数据将被剔除）
+PRED_FILTER_THRESHOLD = 0.1
+# 🔥 关闭采样，展示全部有效数据
+SAMPLE_RATIO = 1.0
 
-# 区域配置
-regions = [
-    {"id": 1, "fb_folder": "fb_1111_2021", "xgb_folder": "xg_1111_2021"},
-    {"id": 2, "fb_folder": "fb_2222_2021", "xgb_folder": "xg_2222_2021"},
-    {"id": 3, "fb_folder": "fb_3333_2021", "xgb_folder": "xg_3333_2021"},
-    {"id": 4, "fb_folder": "fb_4444_2021", "xgb_folder": "xg_4444_2021"},
-    {"id": 5, "fb_folder": "fb_5555_2021", "xgb_folder": "xg_5555_2021"}
+OUT_DIR = "fire_data_by_date"
+BATCH_TMP_DIR = "batch_tmp"
+
+ALL_REGIONS = [
+    (1, "fb_1111_2021"),
+    (2, "fb_2222_2021"),
+    (3, "fb_3333_2021"),
+    (4, "fb_4444_2021"),
+    (5, "fb_5555_2021"),
 ]
 
-all_features = []
+os.makedirs(OUT_DIR, exist_ok=True)
+os.makedirs(BATCH_TMP_DIR, exist_ok=True)
 
-for region in regions:
-    region_id = region["id"]
-    print(f"\n处理区域 {region_id}...")
 
-    # 读取FB模型数据
-    fb_file = os.path.join(region["fb_folder"], "draw.csv")
-    if os.path.exists(fb_file):
-        print(f"  读取FB模型: {fb_file}")
-        # 使用pandas快速读取CSV
-        df_fb = pd.read_csv(
-            fb_file,
-            usecols=['lon', 'lat', 'label', 'pred'],  # 只读取需要的列
-            dtype={
-                'lon': 'float32',
-                'lat': 'float32',
-                'label': 'float32',
-                'pred': 'float32'
-            }
-        )
-        print(f"  共 {len(df_fb)} 行数据")
+def process_single_region(args):
+    rid, folder = args
+    csv_path = os.path.join(folder, "draw_filtered.csv")
 
-        # 降低坐标精度到3位小数(约100米精度，完全足够)
-        df_fb['lon'] = df_fb['lon'].round(3)
-        df_fb['lat'] = df_fb['lat'].round(3)
+    if not os.path.exists(csv_path):
+        print(f"⚠️  区域{rid} 文件不存在，跳过")
+        return
 
-        # 按经纬度聚合(C语言实现，速度极快)
-        agg_fb = df_fb.groupby(['lon', 'lat']).agg({
-            'label': ['sum', 'count'],
-            'pred': 'sum'
-        }).reset_index()
+    print(f"\n🚀 进程启动：开始处理区域 {rid}")
+    print(f"🔍 过滤规则：预测值 < {PRED_FILTER_THRESHOLD} 且 真实标签=0 的数据将被剔除")
 
-        # 重命名列
-        agg_fb.columns = ['lon', 'lat', 'fire_days', 'count', 'fb_pre_sum']
+    region_tmp_dir = os.path.join(BATCH_TMP_DIR, f"region_{rid}")
+    os.makedirs(region_tmp_dir, exist_ok=True)
 
-        # 释放内存
-        del df_fb
+    date_cache = defaultdict(dict)
+    processed = 0
+    filtered = 0
+    batch_num = 0
 
-    # 读取XGB模型数据
-    xgb_file = os.path.join(region["xgb_folder"], "draw.csv")
-    if os.path.exists(xgb_file):
-        print(f"  读取XGB模型: {xgb_file}")
-        df_xgb = pd.read_csv(
-            xgb_file,
-            usecols=['lon', 'lat', 'pred'],
-            dtype={
-                'lon': 'float32',
-                'lat': 'float32',
-                'pred': 'float32'
-            }
-        )
-        print(f"  共 {len(df_xgb)} 行数据")
+    with open(csv_path, "r", encoding="utf-8") as f:
+        header = f.readline().strip().split(",")
+        header = [h.strip() for h in header]
 
-        # 同样降低精度
-        df_xgb['lon'] = df_xgb['lon'].round(3)
-        df_xgb['lat'] = df_xgb['lat'].round(3)
+        try:
+            di = header.index("date")
+        except:
+            di = header.index("dt")
+        li = header.index("lon")
+        lati = header.index("lat")
+        labi = header.index("label")
 
-        # 聚合
-        agg_xgb = df_xgb.groupby(['lon', 'lat']).agg({
-            'pred': 'sum'
-        }).reset_index()
+        predi = None
+        for col in ["pred", "pred_fb", "pred_xgb", "pred_final", "pre"]:
+            if col in header:
+                predi = header.index(col)
+                break
+        if predi is None:
+            print(f"❌ 区域{rid} 找不到预测列")
+            return
 
-        agg_xgb.columns = ['lon', 'lat', 'xgb_pre_sum']
+        pbar = tqdm(desc=f"区域{rid}", unit="行", leave=True)
 
-        # 释放内存
-        del df_xgb
+        for line in f:
+            row = line.split(",")
+            try:
+                d = row[di][:10]
+                lon = round(float(row[li]), COORD_PREC)
+                lat = round(float(row[lati]), COORD_PREC)
+                lab = float(row[labi])
+                pre = float(row[predi])
 
-    # 合并FB和XGB数据
-    print(f"  合并数据...")
-    merged = pd.merge(agg_fb, agg_xgb, on=['lon', 'lat'], how='outer')
+                # 🔥 核心过滤逻辑
+                if pre < PRED_FILTER_THRESHOLD and lab == 0.0:
+                    filtered += 1
+                    processed += 1
+                    pbar.update(1)
+                    continue
 
-    # 填充缺失值
-    merged['fire_days'] = merged['fire_days'].fillna(0).astype(int)
-    merged['count'] = merged['count'].fillna(0).astype(int)
-    merged['fb_pre_sum'] = merged['fb_pre_sum'].fillna(0)
-    merged['xgb_pre_sum'] = merged['xgb_pre_sum'].fillna(0)
+                key = f"{lon},{lat}"
+                if key not in date_cache[d]:
+                    date_cache[d][key] = {
+                        "label_sum": lab,
+                        "pred_sum": pre,
+                        "count": 1,
+                        "rid": rid
+                    }
+                else:
+                    date_cache[d][key]["label_sum"] += lab
+                    date_cache[d][key]["pred_sum"] += pre
+                    date_cache[d][key]["count"] += 1
 
-    # 计算平均值
-    merged['fb_pre_avg'] = merged['fb_pre_sum'] / merged['count']
-    merged['xgb_pre_avg'] = merged['xgb_pre_sum'] / merged['count']
+            except:
+                processed += 1
+                pbar.update(1)
+                continue
 
-    # 添加区域信息
-    merged['region'] = region_id
+            processed += 1
+            pbar.update(1)
 
-    # 转换为GeoJSON格式
-    print(f"  生成GeoJSON要素...")
-    features = []
-    for _, row in merged.iterrows():
-        feature = {
-            "type": "Feature",
-            "geometry": {
-                "type": "Point",
-                "coordinates": [row['lon'], row['lat']]
-            },
-            "properties": {
-                "region": region_id,
-                "fire_days": int(row['fire_days']),
-                "fb_pre_avg": float(row['fb_pre_avg']),
-                "xgb_pre_avg": float(row['xgb_pre_avg'])
-            }
-        }
-        features.append(feature)
+            if processed % WRITE_BATCH == 0:
+                batch_num += 1
+                batch_file = os.path.join(region_tmp_dir, f"batch_{batch_num}.json")
+                with open(batch_file, "w", encoding="utf-8") as bf:
+                    json.dump(date_cache, bf, separators=(",", ":"))
+                date_cache.clear()
+                filter_rate = filtered / processed * 100
+                print(f"\n✅ 区域{rid} 批次{batch_num} 写入完成，过滤率{filter_rate:.2f}%")
 
-    all_features.extend(features)
-    print(f"  区域 {region_id} 完成，生成 {len(features)} 个点")
+        pbar.close()
 
-# 创建最终GeoJSON
-geojson = {
-    "type": "FeatureCollection",
-    "features": all_features
-}
+    if date_cache:
+        batch_num += 1
+        batch_file = os.path.join(region_tmp_dir, f"batch_{batch_num}.json")
+        with open(batch_file, "w", encoding="utf-8") as bf:
+            json.dump(date_cache, bf, separators=(",", ":"))
+        del date_cache
 
-# 保存文件
-output_file = "fire_data.geojson"
-print(f"\n保存文件到 {output_file}...")
-with open(output_file, "w", encoding="utf-8") as f:
-    json.dump(geojson, f, ensure_ascii=False)
+    filter_rate = filtered / processed * 100 if processed > 0 else 0
+    print(f"\n🎉 区域{rid} 处理完成！")
+    print(f"📊 总计处理{processed:,}行，过滤{filtered:,}行，过滤率{filter_rate:.2f}%")
 
-file_size = os.path.getsize(output_file) / 1024 / 1024
-print(f"\n转换完成！")
-print(f"共生成 {len(all_features)} 个唯一地理点")
-print(f"文件大小: {file_size:.2f} MB")
 
-# 统计信息
-if all_features:
-    max_fire = max(f["properties"]["fire_days"] for f in all_features)
-    avg_fire = sum(f["properties"]["fire_days"] for f in all_features) / len(all_features)
-    print(f"\n数据统计:")
-    print(f"  最大火灾天数: {max_fire} 天")
-    print(f"  平均火灾天数: {avg_fire:.2f} 天")
+def merge_all_batches():
+    print("\n" + "=" * 60)
+    print("🚀 开始合并所有区域数据")
+    print("=" * 60)
+
+    final_data = defaultdict(dict)
+
+    for region_dir in os.listdir(BATCH_TMP_DIR):
+        region_path = os.path.join(BATCH_TMP_DIR, region_dir)
+        if not os.path.isdir(region_path):
+            continue
+
+        rid = int(region_dir.replace("region_", ""))
+        print(f"\n📥 正在合并区域 {rid} 的数据...")
+
+        for batch_file in tqdm(os.listdir(region_path), desc=f"区域{rid}合并"):
+            if not batch_file.endswith(".json"):
+                continue
+            bpath = os.path.join(region_path, batch_file)
+
+            with open(bpath, "r", encoding="utf-8") as f:
+                batch_data = json.load(f)
+
+            for dt, points in batch_data.items():
+                for coord, val in points.items():
+                    if coord not in final_data[dt]:
+                        final_data[dt][coord] = val
+                    else:
+                        final_data[dt][coord]["label_sum"] += val["label_sum"]
+                        final_data[dt][coord]["pred_sum"] += val["pred_sum"]
+                        final_data[dt][coord]["count"] += val["count"]
+
+    print("\n✅ 所有数据合并完成！")
+    return final_data
+
+
+def generate_geojson_files(final_data):
+    print("\n" + "=" * 60)
+    print("🗺️  开始生成GeoJSON文件")
+    print("=" * 60)
+
+    date_list = sorted(final_data.keys())
+
+    for dt in tqdm(date_list, desc="生成GeoJSON"):
+        points = final_data[dt]
+        features = []
+
+        for pos, val in points.items():
+            try:
+                lon, lat = map(float, pos.split(","))
+                avg_pred = val["pred_sum"] / val["count"]
+                features.append({
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                    "properties": {
+                        "region": val["rid"],
+                        "fire_occurred": 1 if val["label_sum"] > 0 else 0,
+                        "prediction": round(avg_pred, 4)  # 🔥 只保留真实的当天预测值
+                    }
+                })
+            except:
+                continue
+
+        out_path = os.path.join(OUT_DIR, f"fire_{dt}.geojson")
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump({"type": "FeatureCollection", "features": features}, f, separators=(",", ":"))
+
+    # 保存日期列表
+    with open(os.path.join(OUT_DIR, "date_list.json"), "w", encoding="utf-8") as f:
+        json.dump(date_list, f)
+
+    # 清理临时文件
+    shutil.rmtree(BATCH_TMP_DIR)
+    print(f"\n🎉 全部完成！")
+    print(f"📊 共生成 {len(date_list)} 个日期的GeoJSON文件")
+    print(f"📁 所有文件保存在: {OUT_DIR}/")
+    print(f"📅 日期范围: {date_list[0]} 至 {date_list[-1]}")
+
+
+if __name__ == "__main__":
+    print("=" * 60)
+    print("🔥 火灾数据GeoJSON生成工具（真实预测版）")
+    print("=" * 60)
+    print(f"⚙️  配置：同时处理{MAX_PROCESSES}个区域")
+    print(f"🔍 过滤阈值：预测值 < {PRED_FILTER_THRESHOLD} 且 真实标签=0")
+    print(f"📊 采样比例：{SAMPLE_RATIO*100}%（全部保留）")
+    print("=" * 60)
+
+    with Pool(processes=MAX_PROCESSES) as pool:
+        pool.map(process_single_region, ALL_REGIONS)
+
+    final_data = merge_all_batches()
+    generate_geojson_files(final_data)
