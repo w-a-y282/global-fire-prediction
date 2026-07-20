@@ -1,15 +1,16 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>全球火灾智能预警系统</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>zhurong · Foundation Model for Global Wildfire Prediction</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet" />
     <style>
+        /* 样式与之前相同，此处略，但保留完整样式 */
         :root {
             --primary-dark: #0f172a;
             --primary-blue: #1e40af;
@@ -20,13 +21,11 @@
             --card-bg: #1e293b;
             --border-color: #334155;
         }
-
         body {
             background-color: var(--primary-dark);
             color: #f1f5f9;
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            font-family: 'Inter', system-ui, sans-serif;
         }
-
         .map-container {
             height: calc(100vh - 320px);
             width: 50%;
@@ -35,11 +34,8 @@
             overflow: hidden;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
         }
-
-        #real-map {
-            border-right: 3px solid var(--border-color);
-        }
-
+        #real-map { border-right: 3px solid var(--border-color); }
+        #forecast-map { width: 100%; float: none; height: calc(100vh - 380px); }
         .legend {
             background: var(--card-bg);
             padding: 12px;
@@ -48,7 +44,6 @@
             border: 1px solid var(--border-color);
             color: #f1f5f9;
         }
-
         .legend i {
             width: 18px;
             height: 18px;
@@ -57,37 +52,23 @@
             opacity: 0.8;
             border-radius: 50%;
         }
-
-        .date-picker, .threshold-slider {
-            appearance: none;
-            -webkit-appearance: none;
-            width: 100%;
-            height: 8px;
-            background: var(--border-color);
-            border-radius: 4px;
-            outline: none;
+        .date-picker {
+            background: var(--card-bg);
+            color: #f1f5f9;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 1rem;
             cursor: pointer;
         }
-
-        .date-picker::-webkit-slider-thumb,
-        .threshold-slider::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 24px;
-            height: 24px;
-            background: var(--danger-red);
-            border-radius: 50%;
+        .date-picker:focus {
+            outline: 2px solid var(--primary-blue);
+            outline-offset: 2px;
+        }
+        .date-picker::-webkit-calendar-picker-indicator {
+            filter: invert(1);
             cursor: pointer;
-            transition: all 0.2s;
-            box-shadow: 0 0 10px rgba(220, 38, 38, 0.5);
         }
-
-        .date-picker::-webkit-slider-thumb:hover,
-        .threshold-slider::-webkit-slider-thumb:hover {
-            transform: scale(1.1);
-            box-shadow: 0 0 15px rgba(220, 38, 38, 0.7);
-        }
-
         .loading-overlay {
             position: absolute;
             top: 0;
@@ -101,7 +82,6 @@
             z-index: 1000;
             border-radius: 8px;
         }
-
         .spinner {
             width: 60px;
             height: 60px;
@@ -110,12 +90,10 @@
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
-
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-
         .stat-card {
             background: var(--card-bg);
             border: 1px solid var(--border-color);
@@ -125,7 +103,6 @@
             position: relative;
             overflow: hidden;
         }
-
         .stat-card::before {
             content: '';
             position: absolute;
@@ -135,36 +112,28 @@
             height: 100%;
             transition: all 0.3s;
         }
-
         .stat-card:hover {
             transform: translateY(-3px);
             box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
         }
-
         .stat-card.real::before { background: #b71c1c; }
         .stat-card.real.high::before { background: #7f0000; box-shadow: 0 0 10px rgba(127, 0, 0, 0.5); }
-
         .stat-card.pred::before { background: #ff9800; }
         .stat-card.pred.high::before { background: #e65100; box-shadow: 0 0 10px rgba(230, 81, 0, 0.5); }
-
         .stat-card.high::before { background: #ffeb3b; }
         .stat-card.high.high::before { background: #f9a825; box-shadow: 0 0 10px rgba(249, 168, 37, 0.5); }
-
         .stat-card.recall::before { background: var(--success-green); }
         .stat-card.recall.low::before { background: #059669; }
         .stat-card.recall.medium::before { background: #10b981; }
         .stat-card.recall.high::before { background: #34d399; box-shadow: 0 0 10px rgba(52, 211, 153, 0.5); }
-
         .stat-card.fp::before { background: var(--info-blue); }
         .stat-card.fp.low::before { background: #2563eb; box-shadow: 0 0 10px rgba(37, 99, 235, 0.5); }
         .stat-card.fp.medium::before { background: #3b82f6; }
         .stat-card.fp.high::before { background: #60a5fa; }
-
         .stat-card.fn::before { background: #8b5cf6; }
         .stat-card.fn.low::before { background: #7c3aed; box-shadow: 0 0 10px rgba(124, 58, 237, 0.5); }
         .stat-card.fn.medium::before { background: #8b5cf6; }
         .stat-card.fn.high::before { background: #a78bfa; }
-
         .chart-container {
             background: var(--card-bg);
             border: 1px solid var(--border-color);
@@ -172,36 +141,20 @@
             padding: 20px;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
         }
-
         .nav-item {
             transition: all 0.2s;
             padding: 8px 16px;
             border-radius: 6px;
             cursor: pointer;
         }
-
-        .nav-item:hover {
-            background: rgba(255, 255, 255, 0.1);
-        }
-
-        .nav-item.active {
-            background: var(--primary-blue);
-        }
-
-        .tab-content {
-            display: none;
-            animation: fadeIn 0.3s ease-in-out;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
+        .nav-item:hover { background: rgba(255,255,255,0.1); }
+        .nav-item.active { background: var(--primary-blue); }
+        .tab-content { display: none; animation: fadeIn 0.3s ease; }
+        .tab-content.active { display: block; }
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
-
         .info-card {
             background: var(--card-bg);
             border: 1px solid var(--border-color);
@@ -209,589 +162,833 @@
             padding: 24px;
             margin-bottom: 20px;
         }
-
-        /* 彻底解决蓝圈问题：移除所有Leaflet圆形标记的默认边框 */
         .leaflet-interactive {
             stroke: none !important;
             outline: none !important;
+        }
+        .error-msg {
+            background: rgba(220, 38, 38, 0.15);
+            border: 1px solid #dc2626;
+            color: #fca5a5;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .date-control-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .offset-btn-group {
+            display: flex;
+            gap: 8px;
+            margin-left: 20px;
+        }
+        .offset-btn {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            color: #f1f5f9;
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .offset-btn:hover {
+            background: var(--primary-blue);
+            border-color: var(--primary-blue);
+        }
+        .offset-btn.active {
+            background: var(--primary-blue);
+            border-color: var(--primary-blue);
+            box-shadow: 0 0 10px rgba(30, 64, 175, 0.5);
+        }
+        .map-container.leaflet-container {
+            background: #0f172a;
+        }
+        .forecast-stats {
+            display: flex;
+            gap: 30px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+        .forecast-stat-item {
+            background: var(--card-bg);
+            padding: 10px 18px;
+            border-radius: 8px;
+            border-left: 4px solid var(--warning-orange);
+        }
+        .forecast-stat-item .label {
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+        .forecast-stat-item .value {
+            font-size: 1.8rem;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
 
-<!-- 顶部导航栏 -->
+<!-- Navigation -->
 <nav class="bg-slate-900 border-b border-slate-700 px-6 py-3">
-    <div class="max-w-7xl mx-auto flex justify-between items-center">
+    <div class="max-w-7xl mx-auto flex justify-between items-center flex-wrap gap-2">
         <div class="flex items-center gap-3">
             <i class="fa fa-fire text-red-500 text-2xl"></i>
-            <h1 class="text-xl font-bold">全球火灾智能预警系统</h1>
-            <span class="text-xs bg-red-600 px-2 py-1 rounded-full">实时监测</span>
+            <h1 class="text-xl font-bold">zhurong · Foundation Model for Global Wildfire Prediction</h1>
+            <span class="text-xs bg-red-600 px-2 py-1 rounded-full">Real‑time</span>
         </div>
-        <div class="flex gap-2">
-            <div class="nav-item active" data-tab="map">
-                <i class="fa fa-map-marker mr-2"></i>地图对比
-            </div>
-            <div class="nav-item" data-tab="stats">
-                <i class="fa fa-bar-chart mr-2"></i>数据统计
-            </div>
-            <div class="nav-item" data-tab="model">
-                <i class="fa fa-cogs mr-2"></i>模型评估
-            </div>
-            <div class="nav-item" data-tab="about">
-                <i class="fa fa-info-circle mr-2"></i>关于系统
-            </div>
+        <div class="flex gap-2 flex-wrap">
+            <div class="nav-item active" data-tab="map"><i class="fa fa-map-marker mr-2"></i>Map</div>
+            <div class="nav-item" data-tab="forecast"><i class="fa fa-calendar-plus-o mr-2"></i>Forecast</div>
+            <div class="nav-item" data-tab="stats"><i class="fa fa-bar-chart mr-2"></i>Statistics</div>
+            <div class="nav-item" data-tab="model"><i class="fa fa-cogs mr-2"></i>Model</div>
+            <div class="nav-item" data-tab="about"><i class="fa fa-info-circle mr-2"></i>About</div>
         </div>
     </div>
 </nav>
 
-<!-- 地图对比页面 -->
+<!-- ========== MAP TAB (原主页面) ========== -->
 <div id="map-tab" class="tab-content active">
-    <!-- 控制栏：日期 + 阈值 -->
+    <!-- Date control -->
     <div class="bg-slate-800 border-b border-slate-700 px-6 py-4">
-        <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
-
-            <!-- 日期控制 -->
-            <div>
-                <div class="flex items-center gap-3 mb-2">
-                    <i class="fa fa-calendar text-blue-400 text-xl"></i>
-                    <span class="text-lg font-medium">日期选择</span>
-                </div>
-                <div class="flex justify-between mb-2">
-                    <span class="text-sm text-slate-400">2021-01-01</span>
-                    <span id="current-date" class="text-lg font-semibold text-red-400">-</span>
-                    <span class="text-sm text-slate-400">2021-12-31</span>
-                </div>
-                <input type="range" id="date-slider" class="date-picker" min="0" max="0" value="0">
-                <div class="flex gap-2 mt-3">
-                    <button id="prev-day" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm">前一天</button>
-                    <button id="next-day" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm">后一天</button>
-                </div>
+        <div class="max-w-7xl mx-auto">
+            <div class="flex items-center gap-3 mb-2">
+                <i class="fa fa-calendar text-blue-400 text-xl"></i>
+                <span class="text-lg font-medium">Date Selection</span>
+                <span class="ml-4 text-sm text-slate-400">(Threshold fixed at 0.10)</span>
             </div>
-
-            <!-- 阈值控制模块 -->
-            <div>
-                <div class="flex items-center gap-3 mb-2">
-                    <i class="fa fa-filter text-yellow-400 text-xl"></i>
-                    <span class="text-lg font-medium">预测显示阈值</span>
-                </div>
-                <div class="flex justify-between mb-2">
-                    <span class="text-sm text-slate-400">0.0</span>
-                    <span id="threshold-value" class="text-lg font-semibold text-yellow-400">0.10</span>
-                    <span class="text-sm text-slate-400">1.0</span>
-                </div>
-                <input type="range" id="threshold-slider" class="threshold-slider" min="0" max="100" value="10" step="1">
-                <div class="text-sm text-slate-400 mt-2">
-                    仅显示预测概率 ≥ <span id="threshold-text">0.10</span> 的点
-                </div>
+            <div class="date-control-group">
+                <input type="date" id="date-picker" class="date-picker" />
+                <button id="prev-day" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed" disabled>Previous Day</button>
+                <button id="next-day" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed" disabled>Next Day</button>
+                <span id="current-date-display" class="text-lg font-semibold text-red-400 ml-2">-</span>
             </div>
-
+            <div id="data-error" class="error-msg hidden mt-2">
+                <i class="fa fa-exclamation-circle mr-2"></i>
+                <span id="error-text">Failed to load data. Please check the console for details.</span>
+            </div>
         </div>
     </div>
 
-    <!-- 地图标题 -->
+    <!-- Map headers -->
     <div class="max-w-7xl mx-auto px-6 py-3">
         <div class="flex justify-between text-center">
             <div class="w-1/2 flex items-center justify-center gap-2">
                 <i class="fa fa-fire text-red-500"></i>
-                <span class="text-lg font-semibold text-red-400">真实火灾分布</span>
+                <span class="text-lg font-semibold text-red-400">Real Fire Occurrences</span>
             </div>
             <div class="w-1/2 flex items-center justify-center gap-2">
                 <i class="fa fa-exclamation-triangle text-orange-500"></i>
-                <span class="text-lg font-semibold text-orange-400">模型预测分布（过滤后）</span>
+                <span class="text-lg font-semibold text-orange-400">Model Predictions (≥ 0.10)</span>
             </div>
         </div>
     </div>
 
-    <!-- 双地图容器 -->
+    <!-- Dual maps -->
     <div class="max-w-7xl mx-auto px-6 relative">
         <div id="real-map" class="map-container"></div>
         <div id="pred-map" class="map-container"></div>
         <div id="loading" class="loading-overlay hidden">
             <div class="text-center">
                 <div class="spinner mx-auto mb-4"></div>
-                <p class="text-slate-300">正在加载数据...</p>
+                <p class="text-slate-300">Loading data...</p>
             </div>
         </div>
     </div>
 
-    <!-- 数据分析面板 -->
+    <!-- Daily Analysis -->
     <div class="max-w-7xl mx-auto px-6 py-6">
         <h2 class="text-xl font-bold mb-6 flex items-center gap-2">
-            <i class="fa fa-line-chart text-blue-400"></i> 当日数据分析
+            <i class="fa fa-line-chart text-blue-400"></i> Daily Analysis
         </h2>
+        <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
+            <div id="card-real" class="stat-card real"><div class="flex justify-between items-start mb-2"><div class="text-sm text-red-400 font-medium">Real Fires</div><i class="fa fa-fire text-red-500"></i></div><div id="real-fire-count" class="text-3xl font-bold text-white">0</div></div>
+            <div id="card-pred" class="stat-card pred"><div class="flex justify-between items-start mb-2"><div class="text-sm text-orange-400 font-medium">Displayed Predictions</div><i class="fa fa-exclamation-triangle text-orange-500"></i></div><div id="total-pred-count" class="text-3xl font-bold text-white">0</div></div>
+            <div id="card-high" class="stat-card high"><div class="flex justify-between items-start mb-2"><div class="text-sm text-yellow-400 font-medium">High Prob. (≥0.7)</div><i class="fa fa-warning text-yellow-500"></i></div><div id="high-pred-count" class="text-3xl font-bold text-white">0</div></div>
+            <div id="card-recall" class="stat-card recall"><div class="flex justify-between items-start mb-2"><div class="text-sm text-green-400 font-medium">Recall</div><i class="fa fa-check-circle text-green-500"></i></div><div id="recall" class="text-3xl font-bold text-white">0%</div></div>
+            <div id="card-fp" class="stat-card fp"><div class="flex justify-between items-start mb-2"><div class="text-sm text-blue-400 font-medium">False Positive Rate</div><i class="fa fa-times-circle text-blue-500"></i></div><div id="false-positive" class="text-3xl font-bold text-white">0%</div></div>
+            <div id="card-fn" class="stat-card fn"><div class="flex justify-between items-start mb-2"><div class="text-sm text-purple-400 font-medium">False Negative Rate</div><i class="fa fa-minus-circle text-purple-500"></i></div><div id="false-negative" class="text-3xl font-bold text-white">0%</div></div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="chart-container"><h3 class="text-lg font-semibold mb-4 flex items-center gap-2"><i class="fa fa-pie-chart text-yellow-400"></i> Prediction Probability Distribution</h3><canvas id="probability-chart" height="220"></canvas></div>
+            <div class="chart-container"><h3 class="text-lg font-semibold mb-4 flex items-center gap-2"><i class="fa fa-area-chart text-green-400"></i> Viewed Dates Trend</h3><canvas id="trend-chart" height="220"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ========== FORECAST TAB ========== -->
+<div id="forecast-tab" class="tab-content">
+    <div class="max-w-7xl mx-auto px-6 py-4">
+        <h2 class="text-2xl font-bold mb-4 flex items-center gap-2">
+            <i class="fa fa-calendar-plus-o text-blue-400"></i> Model Forecast
+        </h2>
+        <div class="bg-slate-800 border border-slate-700 rounded-lg p-4 mb-4">
+            <div class="flex flex-wrap items-center gap-4">
+                <div>
+                    <label class="block text-sm text-slate-400 mb-1">Base Date</label>
+                    <input type="date" id="forecast-base-date" class="date-picker" />
+                </div>
+                <div>
+                    <label class="block text-sm text-slate-400 mb-1">Forecast Offset</label>
+                    <div class="offset-btn-group" id="offset-group">
+                        <button class="offset-btn active" data-offset="1">+1 Day</button>
+                        <button class="offset-btn" data-offset="3">+3 Days</button>
+                        <button class="offset-btn" data-offset="7">+7 Days</button>
+                    </div>
+                </div>
+                <button id="forecast-load-btn" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium">Load Forecast</button>
+                <span id="forecast-target-date" class="text-sm text-slate-400 ml-2">Target: —</span>
+            </div>
+            <div id="forecast-error" class="error-msg hidden mt-3"></div>
+        </div>
+
+        <!-- 地图和统计 -->
+        <div class="relative">
+            <div id="forecast-map" class="map-container" style="height: calc(100vh - 380px); width: 100%; float: none;"></div>
+            <div id="forecast-loading" class="loading-overlay hidden">
+                <div class="text-center">
+                    <div class="spinner mx-auto mb-4"></div>
+                    <p class="text-slate-300">Loading forecast data...</p>
+                </div>
+            </div>
+        </div>
 
         <!-- 统计卡片 -->
-        <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
-            <div id="card-real" class="stat-card real">
-                <div class="flex justify-between items-start mb-2">
-                    <div class="text-sm text-red-400 font-medium">真实火灾数</div>
-                    <i class="fa fa-fire text-red-500"></i>
-                </div>
-                <div id="real-fire-count" class="text-3xl font-bold text-white">0</div>
+        <div class="forecast-stats mt-4">
+            <div class="forecast-stat-item">
+                <div class="label">Target Date</div>
+                <div id="forecast-date-label" class="value text-blue-400">—</div>
             </div>
-            <div id="card-pred" class="stat-card pred">
-                <div class="flex justify-between items-start mb-2">
-                    <div class="text-sm text-orange-400 font-medium">显示预测点</div>
-                    <i class="fa fa-exclamation-triangle text-orange-500"></i>
-                </div>
-                <div id="total-pred-count" class="text-3xl font-bold text-white">0</div>
+            <div class="forecast-stat-item">
+                <div class="label">Total Predictions (≥0.10)</div>
+                <div id="forecast-total" class="value text-orange-400">0</div>
             </div>
-            <div id="card-high" class="stat-card high">
-                <div class="flex justify-between items-start mb-2">
-                    <div class="text-sm text-yellow-400 font-medium">高概率点(≥0.7)</div>
-                    <i class="fa fa-warning text-yellow-500"></i>
-                </div>
-                <div id="high-pred-count" class="text-3xl font-bold text-white">0</div>
-            </div>
-            <div id="card-recall" class="stat-card recall">
-                <div class="flex justify-between items-start mb-2">
-                    <div class="text-sm text-green-400 font-medium">召回率</div>
-                    <i class="fa fa-check-circle text-green-500"></i>
-                </div>
-                <div id="recall" class="text-3xl font-bold text-white">0%</div>
-            </div>
-            <div id="card-fp" class="stat-card fp">
-                <div class="flex justify-between items-start mb-2">
-                    <div class="text-sm text-blue-400 font-medium">误报率</div>
-                    <i class="fa fa-times-circle text-blue-500"></i>
-                </div>
-                <div id="false-positive" class="text-3xl font-bold text-white">0%</div>
-            </div>
-            <div id="card-fn" class="stat-card fn">
-                <div class="flex justify-between items-start mb-2">
-                    <div class="text-sm text-purple-400 font-medium">漏报率</div>
-                    <i class="fa fa-minus-circle text-purple-500"></i>
-                </div>
-                <div id="false-negative" class="text-3xl font-bold text-white">0%</div>
-            </div>
-        </div>
-
-        <!-- 图表区域 -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="chart-container">
-                <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <i class="fa fa-pie-chart text-yellow-400"></i> 预测概率分布
-                </h3>
-                <canvas id="probability-chart" height="220"></canvas>
-            </div>
-            <div class="chart-container">
-                <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <i class="fa fa-area-chart text-green-400"></i> 已查看日期趋势
-                </h3>
-                <canvas id="trend-chart" height="220"></canvas>
+            <div class="forecast-stat-item">
+                <div class="label">High Risk (≥0.7)</div>
+                <div id="forecast-high" class="value text-red-400">0</div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- 数据统计页面 -->
+<!-- ========== STATISTICS TAB ========== -->
 <div id="stats-tab" class="tab-content">
     <div class="max-w-7xl mx-auto px-6 py-8">
-        <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
-            <i class="fa fa-bar-chart text-blue-400"></i> 数据统计
-        </h2>
+        <h2 class="text-2xl font-bold mb-6 flex items-center gap-2"><i class="fa fa-bar-chart text-blue-400"></i> Statistics</h2>
         <div class="info-card">
-            <h3 class="text-xl font-semibold mb-4">已查看日期汇总统计</h3>
+            <h3 class="text-xl font-semibold mb-4">Aggregated Statistics for Viewed Dates</h3>
             <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <div>
-                    <div class="text-sm text-slate-400 mb-1">已查看天数</div>
-                    <div id="total-days" class="text-3xl font-bold text-white">0</div>
-                </div>
-                <div>
-                    <div class="text-sm text-slate-400 mb-1">累计真实火灾</div>
-                    <div id="total-real-fires" class="text-3xl font-bold text-red-400">0</div>
-                </div>
-                <div>
-                    <div class="text-sm text-slate-400 mb-1">累计显示预测点</div>
-                    <div id="total-pred-fires" class="text-3xl font-bold text-orange-400">0</div>
-                </div>
-                <div>
-                    <div class="text-sm text-slate-400 mb-1">平均召回率</div>
-                    <div id="avg-recall" class="text-3xl font-bold text-green-400">0%</div>
-                </div>
+                <div><div class="text-sm text-slate-400 mb-1">Days Viewed</div><div id="total-days" class="text-3xl font-bold text-white">0</div></div>
+                <div><div class="text-sm text-slate-400 mb-1">Total Real Fires</div><div id="total-real-fires" class="text-3xl font-bold text-red-400">0</div></div>
+                <div><div class="text-sm text-slate-400 mb-1">Total Predictions Shown</div><div id="total-pred-fires" class="text-3xl font-bold text-orange-400">0</div></div>
+                <div><div class="text-sm text-slate-400 mb-1">Average Recall</div><div id="avg-recall" class="text-3xl font-bold text-green-400">0%</div></div>
             </div>
         </div>
-        <div class="chart-container">
-            <h3 class="text-lg font-semibold mb-4">已查看日期火灾数量趋势</h3>
-            <canvas id="stats-trend-chart" height="300"></canvas>
-        </div>
+        <div class="chart-container"><h3 class="text-lg font-semibold mb-4">Fire Count Trend (Viewed Dates)</h3><canvas id="stats-trend-chart" height="300"></canvas></div>
     </div>
 </div>
 
-<!-- 模型评估页面 -->
+<!-- ========== MODEL TAB ========== -->
 <div id="model-tab" class="tab-content">
     <div class="max-w-7xl mx-auto px-6 py-8">
-        <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
-            <i class="fa fa-cogs text-blue-400"></i> 模型评估
-        </h2>
+        <h2 class="text-2xl font-bold mb-6 flex items-center gap-2"><i class="fa fa-cogs text-blue-400"></i> Model Evaluation</h2>
         <div class="info-card">
-            <h3 class="text-xl font-semibold mb-4">模型参数设置</h3>
+            <h3 class="text-xl font-semibold mb-4">Model Configuration</h3>
             <div class="grid grid-cols-2 md:grid-cols-3 gap-6">
-                <div>
-                    <div class="text-sm text-slate-400 mb-1">当前显示阈值</div>
-                    <div id="current-threshold-param" class="text-xl font-bold text-white">0.10</div>
-                </div>
-                <div>
-                    <div class="text-sm text-slate-400 mb-1">空间匹配距离</div>
-                    <div class="text-xl font-bold text-white">5公里</div>
-                </div>
-                <div>
-                    <div class="text-sm text-slate-400 mb-1">数据点大小</div>
-                    <div class="text-xl font-bold text-white">3像素</div>
-                </div>
+                <div><div class="text-sm text-slate-400 mb-1">Prediction Threshold</div><div class="text-xl font-bold text-white">0.10</div></div>
+                <div><div class="text-sm text-slate-400 mb-1">Spatial Match Distance</div><div class="text-xl font-bold text-white">5 km</div></div>
+                <div><div class="text-sm text-slate-400 mb-1">Point Radius</div><div class="text-xl font-bold text-white">3 px</div></div>
             </div>
         </div>
         <div class="info-card">
-            <h3 class="text-xl font-semibold mb-4">模型性能指标（已查看日期平均）</h3>
+            <h3 class="text-xl font-semibold mb-4">Average Performance Metrics (Viewed Dates)</h3>
             <div class="grid grid-cols-2 md:grid-cols-3 gap-6">
-                <div>
-                    <div class="text-sm text-slate-400 mb-1">平均召回率</div>
-                    <div id="model-avg-recall" class="text-3xl font-bold text-green-400">0%</div>
-                </div>
-                <div>
-                    <div class="text-sm text-slate-400 mb-1">平均误报率</div>
-                    <div id="model-avg-fp" class="text-3xl font-bold text-blue-400">0%</div>
-                </div>
-                <div>
-                    <div class="text-sm text-slate-400 mb-1">平均漏报率</div>
-                    <div id="model-avg-fn" class="text-3xl font-bold text-purple-400">0%</div>
-                </div>
+                <div><div class="text-sm text-slate-400 mb-1">Average Recall</div><div id="model-avg-recall" class="text-3xl font-bold text-green-400">0%</div></div>
+                <div><div class="text-sm text-slate-400 mb-1">Average False Positive Rate</div><div id="model-avg-fp" class="text-3xl font-bold text-blue-400">0%</div></div>
+                <div><div class="text-sm text-slate-400 mb-1">Average False Negative Rate</div><div id="model-avg-fn" class="text-3xl font-bold text-purple-400">0%</div></div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- 关于系统页面 -->
+<!-- ========== ABOUT TAB ========== -->
 <div id="about-tab" class="tab-content">
     <div class="max-w-7xl mx-auto px-6 py-8">
-        <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
-            <i class="fa fa-info-circle text-blue-400"></i> 关于系统
-        </h2>
+        <h2 class="text-2xl font-bold mb-6 flex items-center gap-2"><i class="fa fa-info-circle text-blue-400"></i> About</h2>
         <div class="info-card">
-            <h3 class="text-xl font-semibold mb-4">使用说明</h3>
+            <h3 class="text-xl font-semibold mb-4">How to Use</h3>
             <ul class="text-slate-300 list-disc list-inside space-y-2">
-                <li>拖动<b>预测显示阈值</b>滑块，可实时隐藏低概率预测点</li>
-                <li>地图<b>只显示 ≥ 当前阈值</b>的火灾预测</li>
-                <li>统计数据会随阈值变化自动刷新</li>
+                <li><b>Map</b> – Browse historical fire data with date picker.</li>
+                <li><b>Forecast</b> – Select a base date and offset to view model predictions for future dates.</li>
+                <li><b>Statistics</b> – Aggregated metrics for dates you have viewed.</li>
+                <li><b>Model</b> – View configuration and average performance.</li>
             </ul>
+        </div>
+        <div class="info-card mt-4">
+            <h3 class="text-xl font-semibold mb-4">Data & Model</h3>
+            <p class="text-slate-300">
+                This system visualises fire predictions from the zhurong foundation model.
+                Data is aggregated from multiple regions and presented with a spatial matching algorithm (5 km radius).
+                The dashboard allows interactive exploration of daily fire occurrences and model performance.
+            </p>
         </div>
     </div>
 </div>
 
-<!-- 页脚 -->
 <footer class="bg-slate-900 border-t border-slate-700 px-6 py-4 mt-6">
     <div class="max-w-7xl mx-auto text-slate-400 text-sm text-center">
-        © 2025 全球火灾智能预警系统 | 空间匹配：5km
+        © 2025 zhurong · Foundation Model for Global Wildfire Prediction &nbsp;|&nbsp; Spatial match: 5 km &nbsp;|&nbsp; Threshold: 0.10
     </div>
 </footer>
 
 <script>
-let realMap, predMap;
-let realFireLayer, predictionLayer;
-let dateList = [];
-let currentDateIndex = 0;
-let probabilityChart, trendChart, statsTrendChart;
+    (function() {
+        'use strict';
 
-// 全局阈值（可网页调整）
-let DISPLAY_THRESHOLD = 0.1;
-
-// 全局数据
-let allData = { dates: [], realFires: [], predFires: [], recalls: [] };
-let currentGeoJson = null; // 缓存当日数据，用于阈值实时刷新
-
-const POINT_RADIUS = 3;
-const MATCH_DISTANCE_KM = 5;
-
-// 初始化标签页
-function initTabs() {
-    const navItems = document.querySelectorAll('.nav-item');
-    const tabContents = document.querySelectorAll('.tab-content');
-    navItems.forEach(item => {
-        item.addEventListener('click', () => {
-            navItems.forEach(n => n.classList.remove('active'));
-            tabContents.forEach(c => c.classList.remove('active'));
-            item.classList.add('active');
-            document.getElementById(`${item.dataset.tab}-tab`).classList.add('active');
-            if (item.dataset.tab === 'stats') updateStatsPage();
-            if (item.dataset.tab === 'model') document.getElementById('current-threshold-param').innerText = DISPLAY_THRESHOLD.toFixed(2);
-        });
-    });
-}
-
-// 初始化地图
-function initMaps() {
-    realMap = L.map('real-map').setView([20, 0], 2);
-    predMap = L.map('pred-map').setView([20, 0], 2);
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(realMap);
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(predMap);
-    addLegends();
-    initCharts();
-}
-
-// 更新图例（使用新配色）
-function addLegends() {
-    // 真实火灾图例
-    const realLegend = L.control({position: 'bottomright'});
-    realLegend.onAdd = function () {
-        const div = L.DomUtil.create('div', 'legend');
-        div.innerHTML += '<h4 class="font-bold mb-2">真实火灾</h4>';
-        div.innerHTML += '<div class="flex items-center"><i style="background: #b71c1c;"></i> 火灾发生点</div>';
-        return div;
-    };
-    realLegend.addTo(realMap);
-
-    // 预测火灾图例（新配色）
-    const predLegend = L.control({position: 'bottomright'});
-    predLegend.onAdd = function () {
-        const div = L.DomUtil.create('div', 'legend');
-        div.innerHTML += '<h4 class="font-bold mb-2">预测概率</h4>';
-        div.innerHTML += '<div class="flex items-center mb-1"><i style="background: #fff9c4; opacity: 0.2"></i> 极低 (<0.1)</div>';
-        div.innerHTML += '<div class="flex items-center mb-1"><i style="background: #ffeb3b; opacity: 0.4"></i> 低 (0.1-0.3)</div>';
-        div.innerHTML += '<div class="flex items-center mb-1"><i style="background: #ff9800; opacity: 0.7"></i> 中 (0.3-0.7)</div>';
-        div.innerHTML += '<div class="flex items-center"><i style="background: #f44336; opacity: 0.9"></i> 高 (≥0.7)</div>';
-        return div;
-    };
-    predLegend.addTo(predMap);
-}
-
-function initCharts() {
-    const probCtx = document.getElementById('probability-chart').getContext('2d');
-    probabilityChart = new Chart(probCtx, {
-        type: 'bar', data: {
-            labels: ['极低(<0.1)', '低(0.1-0.3)', '中(0.3-0.7)', '高(≥0.7)'],
-            datasets: [{ data: [0,0,0,0], backgroundColor: ['#fff9c4','#ffeb3b','#ff9800','#f44336'] }]
-        }, options: { plugins:{legend:false}, scales:{y:{beginAtZero:true,grid:{color:'rgba(255,255,255,0.1)'}},x:{grid:{display:false}}} }
-    });
-
-    const trendCtx = document.getElementById('trend-chart').getContext('2d');
-    trendChart = new Chart(trendCtx, {
-        type: 'line', data: { labels:[], datasets:[
-            { label:'真实火灾', borderColor:'#b71c1c', backgroundColor:'rgba(183, 28, 28, 0.2)', fill:true, tension:0.3 },
-            { label:'显示预测点', borderColor:'#ff9800', backgroundColor:'rgba(255, 152, 0, 0.2)', fill:true, tension:0.3 }
-        ]},
-        options: { plugins:{legend:{labels:{color:'#f1f5f9'}}}, scales:{y:{grid:{color:'rgba(255,255,255,0.1)'}},x:{grid:{display:false},ticks:{color:'#f1f5f9'}}} }
-    });
-
-    const statsCtx = document.getElementById('stats-trend-chart').getContext('2d');
-    statsTrendChart = new Chart(statsCtx, {
-        type: 'line', data: { labels:[], datasets:[
-            { label:'真实火灾', borderColor:'#b71c1c', backgroundColor:'rgba(183, 28, 28, 0.2)', fill:true },
-            { label:'显示预测点', borderColor:'#ff9800', backgroundColor:'rgba(255, 152, 0, 0.2)', fill:true }
-        ]},
-        options: { plugins:{legend:{labels:{color:'#f1f5f9'}}}, scales:{y:{grid:{color:'rgba(255,255,255,0.1)'}},x:{grid:{display:false},ticks:{color:'#f1f5f9'}}} }
-    });
-}
-
-// 阈值滑块事件
-document.getElementById('threshold-slider').addEventListener('input', e => {
-    DISPLAY_THRESHOLD = parseFloat((e.target.value / 100).toFixed(2));
-    document.getElementById('threshold-value').innerText = DISPLAY_THRESHOLD.toFixed(2);
-    document.getElementById('threshold-text').innerText = DISPLAY_THRESHOLD.toFixed(2);
-    if (currentGeoJson) refreshMap();
-});
-
-// 刷新地图（根据阈值重绘）
-function refreshMap() {
-    clearLayers();
-    const stats = createLayers(currentGeoJson);
-    updateStatistics(stats);
-    updateCardColors(stats);
-    probabilityChart.data.datasets[0].data = [stats.veryLow, stats.low, stats.mid, stats.high];
-    probabilityChart.update();
-}
-
-// 加载日期列表
-async function loadDateList() {
-    const res = await fetch('fire_data_by_date/date_list.json');
-    dateList = await res.json();
-    document.getElementById('date-slider').max = dateList.length-1;
-    updateDate();
-    loadDayData();
-}
-
-function updateDate() {
-    document.getElementById('current-date').innerText = dateList[currentDateIndex];
-}
-
-// 加载当日数据并缓存
-async function loadDayData() {
-    showLoading(true);
-    const date = dateList[currentDateIndex];
-    const res = await fetch(`fire_data_by_date/fire_${date}.geojson`);
-    currentGeoJson = await res.json();
-    refreshMap();
-    showLoading(false);
-}
-
-// 绘制图层（只显示 ≥ 阈值，完全无边框）
-function createLayers(geojson) {
-    let realFires = [], realLayer = [];
-    let predLayer = [];
-    let stats = { real:0, veryLow:0, low:0, mid:0, high:0, showPred:0, TP:0, FP:0, FN:0 };
-    let matchPreds = [], matchReals = [];
-
-    geojson.features.forEach(f => {
-        const p = f.properties;
-        const lat = f.geometry.coordinates[1];
-        const lng = f.geometry.coordinates[0];
-        const prob = p.prediction;
-
-        // 真实火灾（深红色，完全无边框）
-        if (p.fire_occurred === 1) {
-            stats.real++;
-            matchReals.push({lat,lng,matched:false});
-            realLayer.push(L.circleMarker([lat,lng],{
-                radius: POINT_RADIUS,
-                fillColor: '#b71c1c',
-                fillOpacity: 0.9,
-                stroke: false, // 彻底禁用边框
-                weight: 0
-            }));
+        // =============================================================
+        //  辅助：获取概率值（兼容 prob 和 prediction）
+        // =============================================================
+        function getProb(properties) {
+            if (properties.prob !== undefined && properties.prob !== null) return properties.prob;
+            if (properties.prediction !== undefined && properties.prediction !== null) return properties.prediction;
+            return 0; // 默认
         }
 
-        // 概率分段（新配色）
-        let color, opacity;
-        if (prob < 0.1) {
-            color = '#fff9c4';
-            opacity = 0.2;
-            stats.veryLow++;
+        // =============================================================
+        //  1. 全局变量与 DOM 引用
+        // =============================================================
+        const datePicker = document.getElementById('date-picker');
+        const prevBtn = document.getElementById('prev-day');
+        const nextBtn = document.getElementById('next-day');
+        const currentDateDisplay = document.getElementById('current-date-display');
+        const errorDiv = document.getElementById('data-error');
+        const errorText = document.getElementById('error-text');
+        const loadingDiv = document.getElementById('loading');
+
+        let realMap, predMap;
+        let realFireLayer, predictionLayer;
+        let probabilityChart, trendChart, statsTrendChart;
+
+        let rawDateList = [];
+        let currentDateIndex = 0;
+        let currentGeoJson = null;
+
+        // 新预测页面
+        const forecastBaseDate = document.getElementById('forecast-base-date');
+        const forecastOffsetBtns = document.querySelectorAll('.offset-btn');
+        const forecastLoadBtn = document.getElementById('forecast-load-btn');
+        const forecastTargetDate = document.getElementById('forecast-target-date');
+        const forecastError = document.getElementById('forecast-error');
+        const forecastLoading = document.getElementById('forecast-loading');
+        const forecastMapContainer = document.getElementById('forecast-map');
+        let forecastMap = null;
+        let forecastLayer = null;
+        let currentForecastOffset = 1;
+
+        const DISPLAY_THRESHOLD = 0.10;
+        const POINT_RADIUS = 3;
+        const MATCH_DISTANCE_KM = 5;
+
+        let history = { dates: [], realFires: [], predFires: [], recalls: [], fpRates: [], fnRates: [] };
+
+        // =============================================================
+        //  2. 工具函数
+        // =============================================================
+        function rawToIso(raw) {
+            if (!raw || raw.length !== 8) return raw;
+            return `${raw.substring(0,4)}-${raw.substring(4,6)}-${raw.substring(6,8)}`;
         }
-        else if (prob < 0.3) {
-            color = '#ffeb3b';
-            opacity = 0.4;
-            stats.low++;
+        function isoToRaw(iso) {
+            if (!iso) return iso;
+            return iso.replace(/-/g, '');
         }
-        else if (prob < 0.7) {
-            color = '#ff9800';
-            opacity = 0.7;
-            stats.mid++;
+        function formatDate(d) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth()+1).padStart(2,'0');
+            const day = String(d.getDate()).padStart(2,'0');
+            return `${y}-${m}-${day}`;
         }
-        else {
-            color = '#f44336';
-            opacity = 0.9;
-            stats.high++;
+        function addDays(dateStr, days) {
+            const d = new Date(dateStr + 'T00:00:00');
+            d.setDate(d.getDate() + days);
+            return formatDate(d);
         }
 
-        // 只显示 ≥ 阈值的预测点（完全无边框）
-        if (prob >= DISPLAY_THRESHOLD) {
-            stats.showPred++;
-            if (prob >= 0.1) matchPreds.push({lat,lng,matched:false});
-
-            predLayer.push(L.circleMarker([lat,lng],{
-                radius: POINT_RADIUS,
-                fillColor: color,
-                fillOpacity: opacity,
-                stroke: false, // 彻底禁用边框
-                weight: 0
-            }));
+        function showError(el, msg) {
+            el.classList.remove('hidden');
+            const span = el.querySelector('span');
+            if (span) span.textContent = msg;
+            else el.textContent = msg;
         }
-    });
+        function hideError(el) { el.classList.add('hidden'); }
+        function setControlsEnabled(enabled) {
+            datePicker.disabled = !enabled;
+            prevBtn.disabled = !enabled;
+            nextBtn.disabled = !enabled;
+        }
+        function showLoading(show) {
+            loadingDiv.classList.toggle('hidden', !show);
+        }
 
-    // 空间匹配
-    const match = spatialMatch(matchReals, matchPreds, MATCH_DISTANCE_KM);
-    stats.TP = match.TP;
-    stats.FP = match.FP;
-    stats.FN = match.FN;
-
-    realFireLayer = L.layerGroup(realLayer).addTo(realMap);
-    predictionLayer = L.layerGroup(predLayer).addTo(predMap);
-    return stats;
-}
-
-// 空间匹配
-function spatialMatch(realFires, preds, maxKm) {
-    let TP=0, FP=0, FN=0;
-    realFires.forEach(r => {
-        let min = 999, best = null;
-        preds.forEach(p => {
-            if (!p.matched) {
-                const d = Math.acos(Math.sin(r.lat*Math.PI/180)*Math.sin(p.lat*Math.PI/180)+
-                        Math.cos(r.lat*Math.PI/180)*Math.cos(p.lat*Math.PI/180)*
-                        Math.cos((p.lng-r.lng)*Math.PI/180))*6371;
-                if (d < maxKm && d < min) { min = d; best = p; }
+        function findClosestDate(isoTarget) {
+            if (!rawDateList.length) return null;
+            const rawTarget = isoToRaw(isoTarget);
+            if (rawDateList.includes(rawTarget)) return rawTarget;
+            const targetDate = new Date(isoTarget + 'T00:00:00');
+            let lo = 0, hi = rawDateList.length - 1;
+            while (lo <= hi) {
+                const mid = Math.floor((lo + hi) / 2);
+                const midDate = new Date(rawToIso(rawDateList[mid]) + 'T00:00:00');
+                if (midDate.getTime() === targetDate.getTime()) return rawDateList[mid];
+                if (midDate < targetDate) lo = mid + 1;
+                else hi = mid - 1;
             }
+            if (lo === 0) return rawDateList[0];
+            if (lo === rawDateList.length) return rawDateList[rawDateList.length - 1];
+            const prevDate = new Date(rawToIso(rawDateList[lo-1]) + 'T00:00:00');
+            const nextDate = new Date(rawToIso(rawDateList[lo]) + 'T00:00:00');
+            const diffPrev = Math.abs(prevDate - targetDate);
+            const diffNext = Math.abs(nextDate - targetDate);
+            return diffPrev <= diffNext ? rawDateList[lo-1] : rawDateList[lo];
+        }
+        function getDateIndex(raw) { return rawDateList.indexOf(raw); }
+
+        // =============================================================
+        //  3. 原地图逻辑
+        // =============================================================
+        function initMaps() {
+            realMap = L.map('real-map').setView([20, 0], 2);
+            predMap = L.map('pred-map').setView([20, 0], 2);
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(realMap);
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(predMap);
+            addLegends();
+            initCharts();
+        }
+
+        function addLegends() {
+            const realLegend = L.control({ position: 'bottomright' });
+            realLegend.onAdd = function() {
+                const div = L.DomUtil.create('div', 'legend');
+                div.innerHTML = '<h4 class="font-bold mb-2">Real Fires</h4><div class="flex items-center"><i style="background:#b71c1c;"></i> Occurrence</div>';
+                return div;
+            };
+            realLegend.addTo(realMap);
+
+            const predLegend = L.control({ position: 'bottomright' });
+            predLegend.onAdd = function() {
+                const div = L.DomUtil.create('div', 'legend');
+                div.innerHTML = `
+                    <h4 class="font-bold mb-2">Prediction Probability</h4>
+                    <div class="flex items-center mb-1"><i style="background:#fff9c4;opacity:0.2"></i> Very Low (&lt;0.1)</div>
+                    <div class="flex items-center mb-1"><i style="background:#ffeb3b;opacity:0.4"></i> Low (0.1‑0.3)</div>
+                    <div class="flex items-center mb-1"><i style="background:#ff9800;opacity:0.7"></i> Medium (0.3‑0.7)</div>
+                    <div class="flex items-center"><i style="background:#f44336;opacity:0.9"></i> High (≥0.7)</div>
+                `;
+                return div;
+            };
+            predLegend.addTo(predMap);
+        }
+
+        function initCharts() {
+            const probCtx = document.getElementById('probability-chart').getContext('2d');
+            probabilityChart = new Chart(probCtx, {
+                type: 'bar',
+                data: { labels: ['Very Low (<0.1)','Low (0.1-0.3)','Medium (0.3-0.7)','High (≥0.7)'],
+                        datasets: [{ data: [0,0,0,0], backgroundColor: ['#fff9c4','#ffeb3b','#ff9800','#f44336'] }] },
+                options: { plugins: { legend: false }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' } }, x: { grid: { display: false } } } }
+            });
+            const trendCtx = document.getElementById('trend-chart').getContext('2d');
+            trendChart = new Chart(trendCtx, {
+                type: 'line',
+                data: { labels: [], datasets: [
+                    { label: 'Real Fires', borderColor: '#b71c1c', backgroundColor: 'rgba(183,28,28,0.2)', fill: true, tension: 0.3 },
+                    { label: 'Predictions Shown', borderColor: '#ff9800', backgroundColor: 'rgba(255,152,0,0.2)', fill: true, tension: 0.3 }
+                ]},
+                options: { plugins: { legend: { labels: { color: '#f1f5f9' } } }, scales: { y: { grid: { color: 'rgba(255,255,255,0.1)' } }, x: { grid: { display: false }, ticks: { color: '#f1f5f9' } } } }
+            });
+            const statsCtx = document.getElementById('stats-trend-chart').getContext('2d');
+            statsTrendChart = new Chart(statsCtx, {
+                type: 'line',
+                data: { labels: [], datasets: [
+                    { label: 'Real Fires', borderColor: '#b71c1c', backgroundColor: 'rgba(183,28,28,0.2)', fill: true },
+                    { label: 'Predictions Shown', borderColor: '#ff9800', backgroundColor: 'rgba(255,152,0,0.2)', fill: true }
+                ]},
+                options: { plugins: { legend: { labels: { color: '#f1f5f9' } } }, scales: { y: { grid: { color: 'rgba(255,255,255,0.1)' } }, x: { grid: { display: false }, ticks: { color: '#f1f5f9' } } } }
+            });
+        }
+
+        function spatialMatch(realFires, preds, maxKm) {
+            let TP=0,FP=0,FN=0;
+            realFires.forEach(r => {
+                let min=999,best=null;
+                preds.forEach(p => {
+                    if (!p.matched) {
+                        const d = Math.acos(Math.sin(r.lat*Math.PI/180)*Math.sin(p.lat*Math.PI/180)+
+                            Math.cos(r.lat*Math.PI/180)*Math.cos(p.lat*Math.PI/180)*
+                            Math.cos((p.lng-r.lng)*Math.PI/180))*6371;
+                        if (d<maxKm && d<min) { min=d; best=p; }
+                    }
+                });
+                if (best) { TP++; best.matched=true; } else FN++;
+            });
+            preds.forEach(p => { if (!p.matched) FP++; });
+            return {TP,FP,FN};
+        }
+
+        function clearMapLayers() {
+            if (realFireLayer) { realMap.removeLayer(realFireLayer); realFireLayer=null; }
+            if (predictionLayer) { predMap.removeLayer(predictionLayer); predictionLayer=null; }
+            document.getElementById('real-fire-count').innerText='0';
+            document.getElementById('total-pred-count').innerText='0';
+            document.getElementById('high-pred-count').innerText='0';
+            document.getElementById('recall').innerText='0%';
+            document.getElementById('false-positive').innerText='0%';
+            document.getElementById('false-negative').innerText='0%';
+            probabilityChart.data.datasets[0].data=[0,0,0,0];
+            probabilityChart.update();
+        }
+
+        function createLayers(geojson) {
+            clearMapLayers();
+            if (!geojson || !geojson.features) {
+                realFireLayer = L.layerGroup().addTo(realMap);
+                predictionLayer = L.layerGroup().addTo(predMap);
+                return null;
+            }
+            const realLayer=[], predLayer=[];
+            const stats={real:0, veryLow:0, low:0, mid:0, high:0, showPred:0, TP:0, FP:0, FN:0};
+            const matchReals=[], matchPreds=[];
+            geojson.features.forEach(f => {
+                const p=f.properties;
+                const lat=f.geometry.coordinates[1];
+                const lng=f.geometry.coordinates[0];
+                const prob = getProb(p); // 使用兼容函数
+
+                if (p.fire_occurred===1) {
+                    stats.real++;
+                    matchReals.push({lat,lng,matched:false});
+                    realLayer.push(L.circleMarker([lat,lng],{radius:POINT_RADIUS,fillColor:'#b71c1c',fillOpacity:0.9,stroke:false,weight:0}));
+                }
+                if (prob<0.1) stats.veryLow++;
+                else if (prob<0.3) stats.low++;
+                else if (prob<0.7) stats.mid++;
+                else stats.high++;
+                if (prob>=DISPLAY_THRESHOLD) {
+                    stats.showPred++;
+                    matchPreds.push({lat,lng,matched:false});
+                    let color, opacity;
+                    if (prob<0.3) { color='#ffeb3b'; opacity=0.4; }
+                    else if (prob<0.7) { color='#ff9800'; opacity=0.7; }
+                    else { color='#f44336'; opacity=0.9; }
+                    predLayer.push(L.circleMarker([lat,lng],{radius:POINT_RADIUS,fillColor:color,fillOpacity:opacity,stroke:false,weight:0}));
+                }
+            });
+            const match=spatialMatch(matchReals, matchPreds, MATCH_DISTANCE_KM);
+            stats.TP=match.TP; stats.FP=match.FP; stats.FN=match.FN;
+            realFireLayer = L.layerGroup(realLayer).addTo(realMap);
+            predictionLayer = L.layerGroup(predLayer).addTo(predMap);
+            return stats;
+        }
+
+        function updateUI(stats) {
+            if (!stats) return;
+            document.getElementById('real-fire-count').innerText=stats.real;
+            document.getElementById('total-pred-count').innerText=stats.showPred;
+            document.getElementById('high-pred-count').innerText=stats.high;
+            let recall=0, fpRate=0, fnRate=0;
+            if (stats.real>0) { recall=+(stats.TP/stats.real*100).toFixed(1); fnRate=+(stats.FN/stats.real*100).toFixed(1); }
+            if (stats.showPred>0) fpRate=+(stats.FP/stats.showPred*100).toFixed(1);
+            document.getElementById('recall').innerText=recall+'%';
+            document.getElementById('false-positive').innerText=fpRate+'%';
+            document.getElementById('false-negative').innerText=fnRate+'%';
+            probabilityChart.data.datasets[0].data=[stats.veryLow, stats.low, stats.mid, stats.high];
+            probabilityChart.update();
+            const rawDate = rawDateList[currentDateIndex];
+            if (!history.dates.includes(rawDate)) {
+                history.dates.push(rawDate);
+                history.realFires.push(stats.real);
+                history.predFires.push(stats.showPred);
+                history.recalls.push(recall);
+                history.fpRates.push(fpRate);
+                history.fnRates.push(fnRate);
+                trendChart.data.labels = history.dates.map(d=>rawToIso(d));
+                trendChart.data.datasets[0].data=history.realFires;
+                trendChart.data.datasets[1].data=history.predFires;
+                trendChart.update();
+            }
+            document.getElementById('card-real').classList.toggle('high', stats.real>50);
+            document.getElementById('card-pred').classList.toggle('high', stats.showPred>100);
+        }
+
+        function refreshMap() {
+            const stats = createLayers(currentGeoJson);
+            updateUI(stats);
+        }
+
+        async function loadDayData() {
+            if (!rawDateList.length) { showError(errorDiv,'No date list.'); setControlsEnabled(false); return; }
+            const raw = rawDateList[currentDateIndex];
+            if (!raw) { showError(errorDiv,'Invalid date.'); setControlsEnabled(false); return; }
+            hideError(errorDiv);
+            showLoading(true);
+            clearMapLayers();
+            try {
+                const url = `fire_data_by_date/fire_${raw}.geojson`;
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                currentGeoJson = await res.json();
+                refreshMap();
+                setControlsEnabled(true);
+                const iso = rawToIso(raw);
+                datePicker.value = iso;
+                currentDateDisplay.textContent = iso;
+            } catch(err) {
+                showError(errorDiv, `Failed to load ${raw}: ${err.message}`);
+                currentGeoJson=null; refreshMap(); setControlsEnabled(false);
+            } finally { showLoading(false); }
+        }
+
+        async function loadDateList() {
+            try {
+                const res = await fetch('fire_data_by_date/date_list.json');
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const rawList = await res.json();
+                if (!Array.isArray(rawList) || !rawList.length) throw new Error('Empty date list.');
+                rawDateList = rawList.sort();
+                const firstIso = rawToIso(rawDateList[0]);
+                const lastIso = rawToIso(rawDateList[rawDateList.length-1]);
+                datePicker.min = firstIso; datePicker.max = lastIso;
+                datePicker.value = firstIso;
+                currentDateIndex = 0;
+                currentDateDisplay.textContent = firstIso;
+                setControlsEnabled(true);
+                await loadDayData();
+            } catch(err) {
+                showError(errorDiv, `Failed to load date list: ${err.message}`);
+                setControlsEnabled(false);
+                refreshMap();
+            }
+        }
+
+        function goToDate(isoDate) {
+            if (!rawDateList.length) return;
+            const rawTarget = isoToRaw(isoDate);
+            let targetRaw = rawDateList.includes(rawTarget) ? rawTarget : findClosestDate(isoDate);
+            if (!targetRaw) return;
+            const idx = getDateIndex(targetRaw);
+            if (idx===-1) return;
+            if (idx===currentDateIndex) { loadDayData(); return; }
+            currentDateIndex = idx;
+            currentDateDisplay.textContent = rawToIso(targetRaw);
+            datePicker.value = rawToIso(targetRaw);
+            loadDayData();
+        }
+
+        // =============================================================
+        //  4. 新预测页面（已修复字段读取）
+        // =============================================================
+        function initForecastMap() {
+            if (forecastMap) return;
+            forecastMap = L.map('forecast-map').setView([20, 0], 2);
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(forecastMap);
+            const fLegend = L.control({ position: 'bottomright' });
+            fLegend.onAdd = function() {
+                const div = L.DomUtil.create('div', 'legend');
+                div.innerHTML = `
+                    <h4 class="font-bold mb-2">Prediction Probability</h4>
+                    <div class="flex items-center mb-1"><i style="background:#fff9c4;opacity:0.2"></i> Very Low (&lt;0.1)</div>
+                    <div class="flex items-center mb-1"><i style="background:#ffeb3b;opacity:0.4"></i> Low (0.1‑0.3)</div>
+                    <div class="flex items-center mb-1"><i style="background:#ff9800;opacity:0.7"></i> Medium (0.3‑0.7)</div>
+                    <div class="flex items-center"><i style="background:#f44336;opacity:0.9"></i> High (≥0.7)</div>
+                `;
+                return div;
+            };
+            fLegend.addTo(forecastMap);
+        }
+
+        function clearForecastLayer() {
+            if (forecastLayer) {
+                forecastMap.removeLayer(forecastLayer);
+                forecastLayer = null;
+            }
+        }
+
+        function renderForecast(geojson) {
+            clearForecastLayer();
+            if (!geojson || !geojson.features) {
+                forecastLayer = L.layerGroup().addTo(forecastMap);
+                return;
+            }
+            const markers = [];
+            let total = 0, high = 0;
+            geojson.features.forEach(f => {
+                const p = f.properties;
+                const lat = f.geometry.coordinates[1];
+                const lng = f.geometry.coordinates[0];
+                const prob = getProb(p); // 使用兼容函数
+                if (prob >= DISPLAY_THRESHOLD) {
+                    total++;
+                    if (prob >= 0.7) high++;
+                    let color, opacity;
+                    if (prob < 0.3) { color = '#ffeb3b'; opacity = 0.4; }
+                    else if (prob < 0.7) { color = '#ff9800'; opacity = 0.7; }
+                    else { color = '#f44336'; opacity = 0.9; }
+                    markers.push(L.circleMarker([lat, lng], {
+                        radius: POINT_RADIUS,
+                        fillColor: color,
+                        fillOpacity: opacity,
+                        stroke: false,
+                        weight: 0
+                    }));
+                }
+            });
+            forecastLayer = L.layerGroup(markers).addTo(forecastMap);
+            document.getElementById('forecast-total').textContent = total;
+            document.getElementById('forecast-high').textContent = high;
+        }
+
+        async function loadForecast() {
+            const baseDate = forecastBaseDate.value;
+            if (!baseDate) {
+                showError(forecastError, 'Please select a base date.');
+                return;
+            }
+            hideError(forecastError);
+            const offset = currentForecastOffset;
+            const targetDate = addDays(baseDate, offset);
+            forecastTargetDate.textContent = `Target: ${targetDate}`;
+            document.getElementById('forecast-date-label').textContent = targetDate;
+
+            forecastLoading.classList.remove('hidden');
+            clearForecastLayer();
+
+            try {
+                const url = `geojson_output/fire_${targetDate}.geojson`;
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`HTTP ${res.status} – file not found for ${targetDate}`);
+                const data = await res.json();
+                renderForecast(data);
+                hideError(forecastError);
+            } catch (err) {
+                showError(forecastError, `No forecast data available for ${targetDate}. ${err.message}`);
+                clearForecastLayer();
+                document.getElementById('forecast-total').textContent = '0';
+                document.getElementById('forecast-high').textContent = '0';
+            } finally {
+                forecastLoading.classList.add('hidden');
+            }
+        }
+
+        function setupOffsetButtons() {
+            forecastOffsetBtns.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    forecastOffsetBtns.forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    currentForecastOffset = parseInt(this.dataset.offset, 10);
+                    if (forecastBaseDate.value) loadForecast();
+                });
+            });
+        }
+
+        // =============================================================
+        //  5. 导航标签切换
+        // =============================================================
+        function initTabs() {
+            const navItems = document.querySelectorAll('.nav-item');
+            const tabContents = document.querySelectorAll('.tab-content');
+            navItems.forEach(item => {
+                item.addEventListener('click', () => {
+                    navItems.forEach(n => n.classList.remove('active'));
+                    tabContents.forEach(c => c.classList.remove('active'));
+                    item.classList.add('active');
+                    const tabId = item.dataset.tab;
+                    document.getElementById(tabId + '-tab').classList.add('active');
+                    if (tabId === 'stats') updateStatsPage();
+                    if (tabId === 'forecast') {
+                        setTimeout(() => {
+                            if (!forecastMap) {
+                                initForecastMap();
+                                if (forecastBaseDate.value) loadForecast();
+                            } else {
+                                forecastMap.invalidateSize();
+                            }
+                        }, 100);
+                    }
+                });
+            });
+        }
+
+        function updateStatsPage() {
+            document.getElementById('total-days').textContent = history.dates.length;
+            const totalReal = history.realFires.reduce((a,b)=>a+b,0);
+            const totalPred = history.predFires.reduce((a,b)=>a+b,0);
+            document.getElementById('total-real-fires').textContent = totalReal;
+            document.getElementById('total-pred-fires').textContent = totalPred;
+            const avgRecall = history.recalls.length ? (history.recalls.reduce((a,b)=>a+b,0)/history.recalls.length).toFixed(1) : '0';
+            document.getElementById('avg-recall').textContent = avgRecall+'%';
+            const isoLabels = history.dates.map(d=>rawToIso(d));
+            statsTrendChart.data.labels = isoLabels;
+            statsTrendChart.data.datasets[0].data = history.realFires;
+            statsTrendChart.data.datasets[1].data = history.predFires;
+            statsTrendChart.update();
+            if (history.recalls.length) {
+                document.getElementById('model-avg-recall').textContent = avgRecall+'%';
+                const avgFp = (history.fpRates.reduce((a,b)=>a+b,0)/history.fpRates.length).toFixed(1);
+                const avgFn = (history.fnRates.reduce((a,b)=>a+b,0)/history.fnRates.length).toFixed(1);
+                document.getElementById('model-avg-fp').textContent = avgFp+'%';
+                document.getElementById('model-avg-fn').textContent = avgFn+'%';
+            } else {
+                document.getElementById('model-avg-recall').textContent='0%';
+                document.getElementById('model-avg-fp').textContent='0%';
+                document.getElementById('model-avg-fn').textContent='0%';
+            }
+        }
+
+        // =============================================================
+        //  6. 启动
+        // =============================================================
+        window.addEventListener('load', function() {
+            initTabs();
+            initMaps();
+            setControlsEnabled(false);
+            loadDateList();
+
+            datePicker.addEventListener('change', function() {
+                if (this.value) goToDate(this.value);
+            });
+            prevBtn.addEventListener('click', function() {
+                if (currentDateIndex > 0) {
+                    const newRaw = rawDateList[currentDateIndex-1];
+                    const newIso = rawToIso(newRaw);
+                    datePicker.value = newIso;
+                    goToDate(newIso);
+                }
+            });
+            nextBtn.addEventListener('click', function() {
+                if (currentDateIndex < rawDateList.length-1) {
+                    const newRaw = rawDateList[currentDateIndex+1];
+                    const newIso = rawToIso(newRaw);
+                    datePicker.value = newIso;
+                    goToDate(newIso);
+                }
+            });
+
+            // 预测页面
+            forecastBaseDate.value = formatDate(new Date());
+            setupOffsetButtons();
+            forecastLoadBtn.addEventListener('click', loadForecast);
+            forecastBaseDate.addEventListener('change', function() {
+                if (this.value) loadForecast();
+            });
+
+            setTimeout(() => {
+                initForecastMap();
+                loadForecast();
+            }, 500);
         });
-        if (best) { TP++; best.matched=true; } else FN++;
-    });
-    preds.forEach(p => { if (!p.matched) FP++; });
-    return {TP,FP,FN};
-}
 
-// 更新统计
-function updateStatistics(stats) {
-    document.getElementById('real-fire-count').innerText = stats.real;
-    document.getElementById('total-pred-count').innerText = stats.showPred;
-    document.getElementById('high-pred-count').innerText = stats.high;
-
-    let recall = 0, fpRate=0, fnRate=0;
-    if (stats.real>0) {
-        recall = (stats.TP / stats.real *100).toFixed(1);
-        fnRate = (stats.FN / stats.real *100).toFixed(1);
-    }
-    if (stats.showPred>0) fpRate = (stats.FP / stats.showPred *100).toFixed(1);
-
-    document.getElementById('recall').innerText = recall+'%';
-    document.getElementById('false-positive').innerText = fpRate+'%';
-    document.getElementById('false-negative').innerText = fnRate+'%';
-
-    // 记录历史
-    if (!allData.dates.includes(dateList[currentDateIndex])) {
-        allData.dates.push(dateList[currentDateIndex]);
-        allData.realFires.push(stats.real);
-        allData.predFires.push(stats.showPred);
-        allData.recalls.push(parseFloat(recall));
-        trendChart.data.labels = allData.dates;
-        trendChart.data.datasets[0].data = allData.realFires;
-        trendChart.data.datasets[1].data = allData.predFires;
-        trendChart.update();
-    }
-}
-
-// 卡片颜色
-function updateCardColors(stats) {
-    const realCard = document.getElementById('card-real');
-    realCard.classList.toggle('high', stats.real>50);
-    const predCard = document.getElementById('card-pred');
-    predCard.classList.toggle('high', stats.showPred>100);
-}
-
-// 清空图层
-function clearLayers() {
-    if (realFireLayer) realMap.removeLayer(realFireLayer);
-    if (predictionLayer) predMap.removeLayer(predictionLayer);
-}
-
-// 加载状态
-function showLoading(show) {
-    document.getElementById('loading').classList.toggle('hidden', !show);
-}
-
-// 日期控制
-document.getElementById('date-slider').addEventListener('input', e => {
-    currentDateIndex = parseInt(e.target.value);
-    updateDate();
-    loadDayData();
-});
-document.getElementById('prev-day').addEventListener('click', () => {
-    if (currentDateIndex>0) { currentDateIndex--; document.getElementById('date-slider').value=currentDateIndex; updateDate(); loadDayData(); }
-});
-document.getElementById('next-day').addEventListener('click', () => {
-    if (currentDateIndex < dateList.length-1) { currentDateIndex++; document.getElementById('date-slider').value=currentDateIndex; updateDate(); loadDayData(); }
-});
-
-// 统计页更新
-function updateStatsPage() {
-    document.getElementById('total-days').innerText = allData.dates.length;
-    document.getElementById('total-real-fires').innerText = allData.realFires.reduce((a,b)=>a+b,0);
-    document.getElementById('total-pred-fires').innerText = allData.predFires.reduce((a,b)=>a+b,0);
-    statsTrendChart.data.labels = allData.dates;
-    statsTrendChart.data.datasets[0].data = allData.realFires;
-    statsTrendChart.data.datasets[1].data = allData.predFires;
-    statsTrendChart.update();
-}
-
-// 启动
-window.onload = () => { initTabs(); initMaps(); loadDateList(); }
+    })();
 </script>
 </body>
 </html>
