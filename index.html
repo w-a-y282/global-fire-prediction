@@ -125,29 +125,6 @@
             gap: 12px;
             flex-wrap: wrap;
         }
-        .offset-btn-group {
-            display: flex;
-            gap: 8px;
-            margin-left: 20px;
-        }
-        .offset-btn {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            color: #f1f5f9;
-            padding: 6px 14px;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .offset-btn:hover {
-            background: var(--primary-blue);
-            border-color: var(--primary-blue);
-        }
-        .offset-btn.active {
-            background: var(--primary-blue);
-            border-color: var(--primary-blue);
-            box-shadow: 0 0 10px rgba(30, 64, 175, 0.5);
-        }
         .map-container.leaflet-container {
             background: #0f172a;
         }
@@ -246,23 +223,13 @@
 <!-- ========== FORECAST TAB (online forecast) ========== -->
 <div id="forecast-tab" class="tab-content">
     <div class="max-w-7xl mx-auto px-6 py-4">
-        <!-- 标题已移除 -->
         <div class="bg-slate-800 border border-slate-700 rounded-lg p-4 mb-4">
             <div class="flex flex-wrap items-center gap-4">
                 <div>
-                    <label class="block text-sm text-slate-400 mb-1">Base Date</label>
-                    <input type="date" id="forecast-base-date" class="date-picker" />
+                    <label class="block text-sm text-slate-400 mb-1">Select Date</label>
+                    <input type="date" id="forecast-date-picker" class="date-picker" />
                 </div>
-                <div>
-                    <label class="block text-sm text-slate-400 mb-1">Forecast Offset</label>
-                    <div class="offset-btn-group" id="offset-group">
-                        <button class="offset-btn active" data-offset="1">+1 Day</button>
-                        <button class="offset-btn" data-offset="3">+3 Days</button>
-                        <button class="offset-btn" data-offset="7">+7 Days</button>
-                    </div>
-                </div>
-                <button id="forecast-load-btn" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium">Load Forecast</button>
-                <span id="forecast-target-date" class="text-sm text-slate-400 ml-2">Target: —</span>
+                <span id="forecast-target-date" class="text-sm text-slate-400">Loading...</span>
             </div>
             <div id="forecast-error" class="error-msg hidden mt-3"></div>
         </div>
@@ -306,7 +273,7 @@
     (function() {
         'use strict';
 
-        // ---------- 辅助：获取概率（兼容 prob 和 prediction） ----------
+        // ---------- 辅助：获取概率 ----------
         function getProb(properties) {
             if (properties.prob !== undefined && properties.prob !== null) return properties.prob;
             if (properties.prediction !== undefined && properties.prediction !== null) return properties.prediction;
@@ -330,15 +297,15 @@
         let currentGeoJson = null;
 
         // 预测页面
-        const forecastBaseDate = document.getElementById('forecast-base-date');
-        const forecastOffsetBtns = document.querySelectorAll('.offset-btn');
-        const forecastLoadBtn = document.getElementById('forecast-load-btn');
+        const forecastDatePicker = document.getElementById('forecast-date-picker');
         const forecastTargetDate = document.getElementById('forecast-target-date');
         const forecastError = document.getElementById('forecast-error');
         const forecastLoading = document.getElementById('forecast-loading');
         let forecastMap = null;
         let forecastLayer = null;
-        let currentForecastOffset = 1;
+
+        // 预测可用日期列表
+        let forecastAvailableDates = [];
 
         const DISPLAY_THRESHOLD = 0.10;
         const POINT_RADIUS = 3;
@@ -404,7 +371,7 @@
         }
         function getDateIndex(raw) { return rawDateList.indexOf(raw); }
 
-        // ---------- 原地图逻辑 ----------
+        // ---------- 原地图逻辑 (修改预测图层为全红) ----------
         function initMaps() {
             realMap = L.map('real-map', { attributionControl: false }).setView([20, 0], 2);
             predMap = L.map('pred-map', { attributionControl: false }).setView([20, 0], 2);
@@ -426,15 +393,13 @@
             };
             realLegend.addTo(realMap);
 
-            // 预测图例 - 暖色调三种颜色
+            // 预测图例改为单色：probability > 0.1
             const predLegend = L.control({ position: 'bottomright' });
             predLegend.onAdd = function() {
                 const div = L.DomUtil.create('div', 'legend');
                 div.innerHTML = `
-                    <h4 class="font-bold mb-2">Prediction Probability</h4>
-                    <div class="flex items-center mb-1"><i style="background:#ffcc00;"></i> Low (&lt;0.3)</div>
-                    <div class="flex items-center mb-1"><i style="background:#ff9800;"></i> Medium (0.3‑0.7)</div>
-                    <div class="flex items-center"><i style="background:#f44336;"></i> High (≥0.7)</div>
+                    <h4 class="font-bold mb-2">Prediction</h4>
+                    <div class="flex items-center"><i style="background:#f44336;"></i> probability > 0.1</div>
                 `;
                 return div;
             };
@@ -481,19 +446,15 @@
                 if (p.fire_occurred===1) {
                     realLayer.push(L.circleMarker([lat,lng],{radius:POINT_RADIUS,fillColor:'#b71c1c',fillOpacity:0.9,stroke:false,weight:0}));
                 }
+                // 预测点：只要 >= 阈值，统一红色
                 if (prob>=DISPLAY_THRESHOLD) {
-                    let color, opacity;
-                    if (prob < 0.3) {
-                        color = '#ffcc00';  // 金黄色（暖色）
-                        opacity = 0.7;
-                    } else if (prob < 0.7) {
-                        color = '#ff9800';  // 橙色
-                        opacity = 0.8;
-                    } else {
-                        color = '#f44336';  // 红色
-                        opacity = 0.9;
-                    }
-                    predLayer.push(L.circleMarker([lat,lng],{radius:POINT_RADIUS,fillColor:color,fillOpacity:opacity,stroke:false,weight:0}));
+                    predLayer.push(L.circleMarker([lat,lng],{
+                        radius:POINT_RADIUS,
+                        fillColor:'#f44336',
+                        fillOpacity:0.9,
+                        stroke:false,
+                        weight:0
+                    }));
                 }
             });
             realFireLayer = L.layerGroup(realLayer).addTo(realMap);
@@ -563,7 +524,9 @@
             loadDayData();
         }
 
-        // ---------- 预测地图 ----------
+        // ============================================================
+        //  预测地图逻辑（与上面一致，全红）
+        // ============================================================
         function initForecastMap() {
             if (forecastMap) return;
             forecastMap = L.map('forecast-map', { attributionControl: false }).setView([20, 0], 2);
@@ -574,10 +537,8 @@
             fLegend.onAdd = function() {
                 const div = L.DomUtil.create('div', 'legend');
                 div.innerHTML = `
-                    <h4 class="font-bold mb-2">Prediction Probability</h4>
-                    <div class="flex items-center mb-1"><i style="background:#ffcc00;"></i> Low (&lt;0.3)</div>
-                    <div class="flex items-center mb-1"><i style="background:#ff9800;"></i> Medium (0.3‑0.7)</div>
-                    <div class="flex items-center"><i style="background:#f44336;"></i> High (≥0.7)</div>
+                    <h4 class="font-bold mb-2">Prediction</h4>
+                    <div class="flex items-center"><i style="background:#f44336;"></i> probability > 0.1</div>
                 `;
                 return div;
             };
@@ -607,21 +568,10 @@
                 if (prob >= DISPLAY_THRESHOLD) {
                     total++;
                     if (prob >= 0.7) high++;
-                    let color, opacity;
-                    if (prob < 0.3) {
-                        color = '#ffcc00';
-                        opacity = 0.7;
-                    } else if (prob < 0.7) {
-                        color = '#ff9800';
-                        opacity = 0.8;
-                    } else {
-                        color = '#f44336';
-                        opacity = 0.9;
-                    }
                     markers.push(L.circleMarker([lat, lng], {
                         radius: POINT_RADIUS,
-                        fillColor: color,
-                        fillOpacity: opacity,
+                        fillColor: '#f44336',
+                        fillOpacity: 0.9,
                         stroke: false,
                         weight: 0
                     }));
@@ -632,15 +582,12 @@
             document.getElementById('forecast-high').textContent = high;
         }
 
-        async function loadForecast() {
-            const baseDate = forecastBaseDate.value;
-            if (!baseDate) {
-                showError(forecastError, 'Please select a base date.');
+        async function loadForecastData(targetDate) {
+            if (!targetDate) {
+                showError(forecastError, 'Please select a date.');
                 return;
             }
             hideError(forecastError);
-            const offset = currentForecastOffset;
-            const targetDate = addDays(baseDate, offset);
             forecastTargetDate.textContent = `Target: ${targetDate}`;
             document.getElementById('forecast-date-label').textContent = targetDate;
 
@@ -664,15 +611,78 @@
             }
         }
 
-        function setupOffsetButtons() {
-            forecastOffsetBtns.forEach(btn => {
-                btn.addEventListener('click', function() {
-                    forecastOffsetBtns.forEach(b => b.classList.remove('active'));
-                    this.classList.add('active');
-                    currentForecastOffset = parseInt(this.dataset.offset, 10);
-                    if (forecastBaseDate.value) loadForecast();
+        async function loadForecastDateList() {
+            try {
+                const res = await fetch('geojson_output/date_list.json');
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const rawList = await res.json();
+                if (!Array.isArray(rawList) || !rawList.length) throw new Error('Empty forecast date list.');
+                forecastAvailableDates = rawList.map(d => rawToIso(d)).sort();
+
+                const today = new Date();
+                const todayStr = formatDate(today);
+                const minDate = new Date(today);
+                minDate.setDate(today.getDate() - 6);
+                const maxDate = new Date(today);
+                maxDate.setDate(today.getDate() + 7);
+
+                const inWindow = forecastAvailableDates.filter(d => {
+                    const dObj = new Date(d + 'T00:00:00');
+                    return dObj >= minDate && dObj <= maxDate;
                 });
-            });
+
+                if (inWindow.length === 0) {
+                    const sorted = forecastAvailableDates.slice(-7);
+                    inWindow.push(...sorted);
+                }
+
+                const minIso = inWindow[0];
+                const maxIso = inWindow[inWindow.length - 1];
+                forecastDatePicker.min = minIso;
+                forecastDatePicker.max = maxIso;
+
+                let defaultDate = todayStr;
+                if (!inWindow.includes(defaultDate)) {
+                    const candidates = inWindow.map(d => ({date: d, diff: Math.abs(new Date(d) - today)}));
+                    candidates.sort((a,b) => a.diff - b.diff);
+                    defaultDate = candidates[0]?.date || inWindow[0];
+                }
+                forecastDatePicker.value = defaultDate;
+                forecastTargetDate.textContent = `Target: ${defaultDate}`;
+                document.getElementById('forecast-date-label').textContent = defaultDate;
+                await loadForecastData(defaultDate);
+            } catch (err) {
+                showError(forecastError, `Failed to load forecast date list: ${err.message}`);
+                const todayStr = formatDate(new Date());
+                forecastDatePicker.value = todayStr;
+                forecastDatePicker.min = todayStr;
+                forecastDatePicker.max = todayStr;
+                await loadForecastData(todayStr);
+            }
+        }
+
+        function onForecastDateChange() {
+            const val = forecastDatePicker.value;
+            if (!val) return;
+            if (!forecastAvailableDates.includes(val)) {
+                const target = new Date(val + 'T00:00:00');
+                const candidates = forecastAvailableDates.map(d => ({
+                    date: d,
+                    diff: Math.abs(new Date(d + 'T00:00:00') - target)
+                }));
+                candidates.sort((a,b) => a.diff - b.diff);
+                const nearest = candidates[0]?.date;
+                if (nearest) {
+                    forecastDatePicker.value = nearest;
+                    showError(forecastError, `Date ${val} not available. Showing nearest: ${nearest}`);
+                    setTimeout(() => hideError(forecastError), 3000);
+                    loadForecastData(nearest);
+                } else {
+                    showError(forecastError, 'No available date found.');
+                }
+            } else {
+                loadForecastData(val);
+            }
         }
 
         // ---------- 导航标签切换 ----------
@@ -690,7 +700,9 @@
                         setTimeout(() => {
                             if (!forecastMap) {
                                 initForecastMap();
-                                if (forecastBaseDate.value) loadForecast();
+                                if (forecastDatePicker.value) {
+                                    loadForecastData(forecastDatePicker.value);
+                                }
                             } else {
                                 forecastMap.invalidateSize();
                             }
@@ -727,16 +739,16 @@
                 }
             });
 
-            forecastBaseDate.value = formatDate(new Date());
-            setupOffsetButtons();
-            forecastLoadBtn.addEventListener('click', loadForecast);
-            forecastBaseDate.addEventListener('change', function() {
-                if (this.value) loadForecast();
-            });
+            forecastDatePicker.addEventListener('change', onForecastDateChange);
+            loadForecastDateList();
 
             setTimeout(() => {
-                initForecastMap();
-                loadForecast();
+                if (!forecastMap) {
+                    initForecastMap();
+                    if (forecastDatePicker.value) {
+                        loadForecastData(forecastDatePicker.value);
+                    }
+                }
             }, 500);
         });
 
