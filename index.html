@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>zhurong · Foundation Model for Global Wildfire Prediction</title>
+    <title>Zhurong · Foundation Model for Global Wildfire Prediction</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -160,7 +160,7 @@
     <div class="max-w-7xl mx-auto flex justify-between items-center flex-wrap gap-2">
         <div class="flex items-center gap-3">
             <i class="fa fa-fire text-red-500 text-2xl"></i>
-            <h1 class="text-xl font-bold">zhurong · Foundation Model for Global Wildfire Prediction</h1>
+            <h1 class="text-xl font-bold">Zhurong · Foundation Model for Global Wildfire Prediction</h1>
             <span class="text-xs bg-red-600 px-2 py-1 rounded-full">Real‑time</span>
         </div>
         <div class="flex gap-2 flex-wrap">
@@ -265,7 +265,7 @@
 
 <footer class="bg-slate-900 border-t border-slate-700 px-6 py-4 mt-6">
     <div class="max-w-7xl mx-auto text-slate-400 text-sm text-center">
-        © zhurong · Foundation Model for Global Wildfire Prediction
+        © Zhurong · Foundation Model for Global Wildfire Prediction
     </div>
 </footer>
 
@@ -371,7 +371,7 @@
         }
         function getDateIndex(raw) { return rawDateList.indexOf(raw); }
 
-        // ---------- 原地图逻辑 (修改预测图层为全红) ----------
+        // ---------- 原地图逻辑 (预测图层全红) ----------
         function initMaps() {
             realMap = L.map('real-map', { attributionControl: false }).setView([20, 0], 2);
             predMap = L.map('pred-map', { attributionControl: false }).setView([20, 0], 2);
@@ -393,13 +393,12 @@
             };
             realLegend.addTo(realMap);
 
-            // 预测图例改为单色：probability > 0.1
             const predLegend = L.control({ position: 'bottomright' });
             predLegend.onAdd = function() {
                 const div = L.DomUtil.create('div', 'legend');
                 div.innerHTML = `
                     <h4 class="font-bold mb-2">Prediction</h4>
-                    <div class="flex items-center"><i style="background:#f44336;"></i> probability > 0.1</div>
+                    <div class="flex items-center"><i style="background:#f44336;"></i> Probability > 0.1</div>
                 `;
                 return div;
             };
@@ -446,7 +445,6 @@
                 if (p.fire_occurred===1) {
                     realLayer.push(L.circleMarker([lat,lng],{radius:POINT_RADIUS,fillColor:'#b71c1c',fillOpacity:0.9,stroke:false,weight:0}));
                 }
-                // 预测点：只要 >= 阈值，统一红色
                 if (prob>=DISPLAY_THRESHOLD) {
                     predLayer.push(L.circleMarker([lat,lng],{
                         radius:POINT_RADIUS,
@@ -525,7 +523,7 @@
         }
 
         // ============================================================
-        //  预测地图逻辑（与上面一致，全红）
+        //  预测地图逻辑（全红）
         // ============================================================
         function initForecastMap() {
             if (forecastMap) return;
@@ -538,7 +536,7 @@
                 const div = L.DomUtil.create('div', 'legend');
                 div.innerHTML = `
                     <h4 class="font-bold mb-2">Prediction</h4>
-                    <div class="flex items-center"><i style="background:#f44336;"></i> probability > 0.1</div>
+                    <div class="flex items-center"><i style="background:#f44336;"></i> Probability > 0.1</div>
                 `;
                 return div;
             };
